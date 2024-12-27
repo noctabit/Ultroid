@@ -5,6 +5,7 @@
 # PLease read the GNU Affero General Public License in
 # <https://www.github.com/TeamUltroid/Ultroid/blob/main/LICENSE/>.
 
+import aiohttp
 import ast
 import asyncio
 import re
@@ -830,8 +831,15 @@ async def media(event):
         else:
             media = await event.client.download_media(response, "alvpc")
             try:
-                x = upl(media)
-                url = f"https://graph.org/{x[0]}"
+                async with aiohttp.ClientSession() as session:
+                    with open(media, 'rb') as file:
+                        data = {'file': file}
+                        async with session.post("https://envs.sh", data=data) as resp:
+                            if resp.status == 200:
+                                result = await resp.text()
+                                url = result.strip()
+                            else:
+                                raise Exception(f"Failed to upload file. Status: {resp.status}")
                 remove(media)
             except BaseException as er:
                 LOGS.exception(er)
@@ -942,11 +950,11 @@ async def set_wrns(event):
 async def media(event):
     await event.delete()
     pru = event.sender_id
-    var = "PMPIC"
+    var = "PM Pic"
     name = "PM Media"
     async with event.client.conversation(pru) as conv:
         await conv.send_message(
-            "**PM Media**\nSend me a pic/gif/sticker/link  to set as pmpermit media.\n\nUse /cancel to terminate the operation.",
+            "**Alive Media**\nSend me a pic/gif/media to set as alive media.\n\nUse /cancel to terminate the operation.",
         )
         response = await conv.get_response()
         try:
@@ -958,7 +966,6 @@ async def media(event):
                 )
         except BaseException as er:
             LOGS.exception(er)
-        media = await event.client.download_media(response, "pmpc")
         if (
             not (response.text).startswith("/")
             and response.text != ""
@@ -968,9 +975,17 @@ async def media(event):
         elif response.sticker:
             url = response.file.id
         else:
+            media = await event.client.download_media(response, "pmpc")
             try:
-                x = upl(media)
-                url = f"https://graph.org/{x[0]}"
+                async with aiohttp.ClientSession() as session:
+                    with open(media, 'rb') as file:
+                        data = {'file': file}
+                        async with session.post("https://envs.sh", data=data) as resp:
+                            if resp.status == 200:
+                                result = await resp.text()
+                                url = result.strip()
+                            else:
+                                raise Exception(f"Failed to upload file. Status: {resp.status}")
                 remove(media)
             except BaseException as er:
                 LOGS.exception(er)
