@@ -5,18 +5,11 @@
 # PLease read the GNU Affero General Public License in
 # <https://github.com/TeamUltroid/pyUltroid/blob/main/LICENSE>.
 
-
-# -----------------Random Stuff--------------
-
 import math
 
 from telethon.tl import functions, types
 
 from .. import LOGS
-
-# -----------
-# @buddhhu
-
 
 async def get_uinfo(e):
     user, data = None, None
@@ -38,20 +31,17 @@ async def get_uinfo(e):
     return user, data
 
 
-# Random stuffs dk who added
-
-
 async def get_chat_info(chat, event):
     if isinstance(chat, types.Channel):
         chat_info = await event.client(functions.channels.GetFullChannelRequest(chat))
     elif isinstance(chat, types.Chat):
         chat_info = await event.client(functions.messages.GetFullChatRequest(chat))
     else:
-        return await event.eor("`Use this for Group/Channel.`")
+        return await event.eor("'Usa esto para Grupos/Canales'")
     full = chat_info.full_chat
     chat_photo = full.chat_photo
     broadcast = getattr(chat, "broadcast", False)
-    chat_type = "Channel" if broadcast else "Group"
+    chat_type = "• ᴄʜᴀɴɴᴇʟ" if broadcast else "• ɢʀᴜᴘᴏ"
     chat_title = chat.title
     try:
         msg_info = await event.client(
@@ -121,62 +111,62 @@ async def get_chat_info(chat, event):
             admins = participants_admins.count if participants_admins else None
         except Exception as e:
             LOGS.info(f"Exception: {e}")
-    caption = "ℹ️ <b>[<u>CHAT INFO</u>]</b>\n"
-    caption += f"🆔 <b>ID:</b> <code>{chat.id}</code>\n"
+    caption = "<b>* ᴰᵃᵗᵃˢᵉᵗ ᵖᵒʳ ᵀᵉˡᵉᵍʳᵃᵐ ᴬᴾᴵ</b>\n"
+    caption += f"<b>• ᴄʜᴀᴛ ɪᴅ</b> ⇝ <code>{chat.id}</code>\n"
     if chat_title is not None:
-        caption += f"📛 <b>{chat_type} name:</b> <code>{chat_title}</code>\n"
+        caption += f"<b>{chat_type} ɴᴏᴍʙʀᴇ</b> ⇝ <code>{chat_title}</code>\n"
     if chat.username:
-        caption += f"🔗 <b>Link:</b> @{chat.username}\n"
+        caption += f"<b>• ʟɪɴᴋ</b> ⇝ @{chat.username}\n"
     else:
-        caption += f"🗳 <b>{chat_type} type:</b> Private\n"
+        caption += f"<b>{chat_type} ᴛɪᴘᴏ</b> ⇝ <code>Privado</code>\n"
     if creator_username:
-        caption += f"🖌 <b>Creator:</b> {creator_username}\n"
+        caption += f"<b>• ᴄʀᴇᴀᴅᴏʀ</b> ⇝ {creator_username}\n"
     elif creator_valid:
-        caption += f'🖌 <b>Creator:</b> <a href="tg://user?id={creator_id}">{creator_firstname}</a>\n'
+        caption += f'<b>• ᴄʀᴇᴀᴅᴏʀ</b> ⇝ <a href="tg://user?id={creator_id}">{creator_firstname}</a>\n'
     if created:
-        caption += f"🖌 <b>Created:</b> <code>{created.date().strftime('%b %d, %Y')} - {created.time()}</code>\n"
+        caption += f"<b>• ᴄʀᴇᴀᴅᴏ</b> ⇝ <code>{created.date().strftime('%b %d, %Y')} - {created.time()}</code>\n"
     else:
-        caption += f"🖌 <b>Created:</b> <code>{chat.date.date().strftime('%b %d, %Y')} - {chat.date.time()}</code> ⚠\n"
-    caption += f"🗡 <b>Data Centre ID:</b> {dc_id}\n"
+        caption += f"<b>• ᴄʀᴇᴀᴅᴏ</b> ⇝ <code>{chat.date.date().strftime('%b %d, %Y')} - {chat.date.time()}</code>\n"
+    caption += f"<b>• ᴅᴀᴛᴀ ᴄᴇɴᴛᴇʀ ɪᴅ</b> ⇝  <code>{dc_id}</code>\n"
     if exp_count is not None:
         chat_level = int((1 + math.sqrt(1 + 7 * exp_count / 14)) / 2)
-        caption += f"⭐️ <b>{chat_type} level:</b> <code>{chat_level}</code>\n"
+        caption += f"<b>{chat_type} ʟᴇᴠᴇʟ</b> ⇝ <code>{chat_level}</code>\n"
     if messages_viewable is not None:
-        caption += f"💬 <b>Viewable messages:</b> <code>{messages_viewable}</code>\n"
+        caption += f"<b>• ᴍᴇɴꜱᴀᴊᴇꜱ ᴠɪꜱɪʙʟᴇꜱ</b> ⇝ <code>{messages_viewable}</code>\n"
     if messages_sent:
-        caption += f"💬 <b>Messages sent:</b> <code>{messages_sent}</code>\n"
+        caption += f"<b>• ᴛᴏᴛᴀʟ ᴅᴇ ᴍᴇɴꜱᴀᴊᴇꜱ</b> ⇝ <code>{messages_sent}</code>\n"
     elif messages_sent_alt:
-        caption += f"💬 <b>Messages sent:</b> <code>{messages_sent_alt}</code> ⚠\n"
+        caption += f"<b>• ᴛᴏᴛᴀʟ ᴅᴇ ᴍᴇɴꜱᴀᴊᴇꜱ</b> ⇝ <code>{messages_sent_alt}</code> ⚠\n"
     if members is not None:
-        caption += f"👥 <b>Members:</b> <code>{members}</code>\n"
+        caption += f"<b>• ᴍɪᴇᴍʙʀᴏꜱ</b> ⇝ <code>{members}</code>\n"
     if admins:
-        caption += f"👮 <b>Administrators:</b> <code>{admins}</code>\n"
+        caption += f"<b>• ᴀᴅᴍɪɴɪꜱ</b> ⇝ <code>{admins}</code>\n"
     if full.bot_info:
-        caption += f"🤖 <b>Bots:</b> <code>{len(full.bot_info)}</code>\n"
+        caption += f"<b>• ʙᴏᴛꜱ</b> ⇝ <code>{len(full.bot_info)}</code>\n"
     if members_online:
-        caption += f"👀 <b>Currently online:</b> <code>{members_online}</code>\n"
+        caption += f"<b>• ᴍɪᴇᴍʙʀᴏꜱ ᴏɴʟɪɴᴇ</b> ⇝ <code>{members_online}</code>\n"
     if restricted_users is not None:
-        caption += f"🔕 <b>Restricted users:</b> <code>{restricted_users}</code>\n"
+        caption += f"<b>• ᴍɪᴇᴍʙʀᴏꜱ ʀᴇꜱᴛʀɪɴɢɪᴅᴏꜱ</b> ⇝ <code>{restricted_users}</code>\n"
     if banned_users:
-        caption += f"📨 <b>Banned users:</b> <code>{banned_users}</code>\n"
+        caption += f"<b>• ᴜꜱᴜᴀʀɪᴏꜱ ʙᴀɴᴇᴀᴅᴏꜱ</b> ⇝ <code>{banned_users}</code>\n"
     if group_stickers:
-        caption += f'📹 <b>{chat_type} stickers:</b> <a href="t.me/addstickers/{full.stickerset.short_name}">{group_stickers}</a>\n'
+        caption += f'<b>{chat_type} ꜱᴛɪᴄᴋᴇʀꜱ</b> ⇝ <a href="t.me/addstickers/{full.stickerset.short_name}">{group_stickers}</a>\n'
     if not broadcast:
         if getattr(chat, "slowmode_enabled", None):
-            caption += f"👉 <b>Slow mode:</b> <code>True</code>"
-            caption += f", 🕐 <code>{full.slowmode_seconds}s</code>\n"
+            caption += f"<b>• ꜱʟᴏᴡ ᴍᴏᴅᴇ</b> ⇝ <code>Sí✔</code>"
+            caption += f" <code>[{full.slowmode_seconds}s]</code>\n"
         else:
-            caption += f"🦸‍♂ <b>Supergroup:</b> {supergroup}\n"
+            caption += f"<b>• ꜱᴜᴘᴇʀɢʀᴜᴘᴏ</b> ⇝ <code>{supergroup}</code>\n"
     if getattr(chat, "restricted", None):
-        caption += f"🎌 <b>Restricted:</b> {chat.restricted}\n"
+        caption += f"<b>• ʀᴇꜱᴛʀɪɴɢɪɢᴏ</b> ⇝ <code>{chat.restricted}</code>\n"
         rist = chat.restriction_reason[0]
-        caption += f"> Platform: {rist.platform}\n"
-        caption += f"> Reason: {rist.reason}\n"
-        caption += f"> Text: {rist.text}\n\n"
+        caption += f"> PLATAFORMA ⇝ <code>{rist.platform}</code>\n"
+        caption += f"> MOTIVO ⇝ <code>{rist.reason}</code>\n"
+        caption += f"> TEXTO ⇝ <code>{rist.text}</code>\n\n"
     if getattr(chat, "scam", None):
-        caption += "⚠ <b>Scam:</b> <b>Yes</b>\n"
+        caption += "<b>• ꜱᴄᴀᴍ:</b> <b>Yes</b>\n"
     if getattr(chat, "verified", None):
-        caption += f"✅ <b>Verified by Telegram:</b> <code>Yes</code>\n\n"
+        caption += f"<b>• ᴠᴇʀɪꜰɪᴄᴀᴅᴏ</b> ⇝ <code>Yes</code>\n\n"
     if full.about:
-        caption += f"🗒 <b>Description:</b> \n<code>{full.about}</code>\n"
+        caption += f"<b>• ᴅᴇᴛᴀʟʟᴇ</b> ↯ \n<code>{full.about}</code>\n"
     return chat_photo, caption
