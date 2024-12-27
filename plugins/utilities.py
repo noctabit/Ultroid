@@ -55,6 +55,7 @@ import io
 import os
 import pathlib
 import time
+import math  # Añadido
 from datetime import datetime as dt
 
 try:
@@ -91,6 +92,7 @@ from telethon.tl.types import (
     TLObject,
     User,
 )
+from telethon.tl import functions, types  # Añadido
 from telethon.utils import get_peer_id
 
 from pyUltroid.fns.info import get_chat_info
