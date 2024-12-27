@@ -285,84 +285,164 @@ async def _(e):
         await eor(ev, f"Demoted {name.first_name} in Total : {c} {key} chats.")
 
 
-@ultroid_cmd(pattern="ungban( (.*)|$)", fullsudo=True)
-async def _(e):
-    xx = await e.eor("`UnGbanning...`")
-    match = e.pattern_match.group(1).strip()
-    peer = None
-    if e.reply_to_msg_id:
-        userid = (await e.get_reply_message()).sender_id
-    elif match:
-        try:
-            userid = int(match)
-        except ValueError:
-            userid = match
-        try:
-            userid = (await e.client.get_entity(userid)).id
-        except Exception as er:
-            return await xx.edit(f"Failed to get User...\nError: {er}")
-    elif e.is_private:
-        userid = e.chat_id
-    else:
-        return await xx.eor("`Reply to some msg or add their id.`", time=5)
-    if not is_gbanned(userid):
-        return await xx.edit("`User/Channel is not Gbanned...`")
-    try:
-        if not peer:
-            peer = await e.client.get_entity(userid)
-        name = inline_mention(peer)
-    except BaseException:
-        userid = int(userid)
-        name = str(userid)
-    chats = 0
-    if e.client._dialogs:
-        dialog = e.client._dialogs
-    else:
-        dialog = await e.client.get_dialogs()
-        e.client._dialogs.extend(dialog)
-    for ggban in dialog:
-        if ggban.is_group or ggban.is_channel:
-            try:
-                await e.client.edit_permissions(ggban.id, userid, view_messages=True)
-                chats += 1
-            except FloodWaitError as fw:
-                LOGS.info(
-                    f"[FLOOD_WAIT_ERROR] : on Ungban\nSleeping for {fw.seconds+10}"
-                )
-                await asyncio.sleep(fw.seconds + 10)
-                try:
-                    await e.client.edit_permissions(
-                        ggban.id, userid, view_messages=True
-                    )
-                    chats += 1
-                except BaseException as er:
-                    LOGS.exception(er)
-            except (ChatAdminRequiredError, ValueError):
-                pass
-            except BaseException as er:
-                LOGS.exception(er)
-    ungban(userid)
-    if isinstance(peer, User):
-        await e.client(UnblockRequest(userid))
-    await xx.edit(
-        f"`Ungbaned` {name} in {chats} `chats.\nRemoved from gbanwatch.`",
-    )
-
-
+# --- Sección 1: Comando .gban ---
 @ultroid_cmd(pattern="gban( (.*)|$)", fullsudo=True)
 async def _(e):
-    xx = await e.eor("`Gbanning...`")
+    # Registrar el inicio del tiempo
+    start_time = time.time()
+
+    # Mensaje inicial mientras se procesa el comando
+    api_calls = 1  # Contador de llamadas a la API (inicia en 1 tras mandar el comando)
+
+    xx = await e.eor("`Good bye, my friend...`")
     reason = ""
-    if e.reply_to_msg_id:
-        userid = (await e.get_reply_message()).sender_id
+    api_calls += 1  # Incrementamos el contador
+
+    # --- Bloque 1: Identificación del usuario y motivo ---
+    if e.reply_to_msg_id:  # Si se responde a un mensaje
+        replied_msg = await e.get_reply_message()  # Llama a la API para obtener el mensaje respondido 
+        api_calls += 1  # Incrementamos el contador
+        userid = replied_msg.sender_id  # Extrae el ID del remitente del mensaje
+        try:
+            reason = e.text.split(" ", maxsplit=1)[1]  # Obtén el motivo (si existe)
+        except IndexError:
+            reason = ""  # Si no hay motivo, se deja vacío
+    elif e.pattern_match.group(1).strip():  # Si se pasa el usuario/motivo como texto
+        usr = e.text.split(maxsplit=2)[1]
+        try:
+            userid = await e.client.parse_id(usr)  # Tercera posible llamada
+            api_calls += 1  # Incrementamos el contador
+        except ValueError:
+            userid = usr
+        try:
+            reason = e.text.split(maxsplit=2)[2]
+        except IndexError:
+            pass
+    elif e.is_private:  # Si el comando se usa en un chat privado
+        userid = e.chat_id
         try:
             reason = e.text.split(" ", maxsplit=1)[1]
         except IndexError:
             pass
+    else:  # Si no se especifica usuario ni motivo
+        return await xx.eor("`Responde a un mensaje o especifica un ID/username`", time=5)
+
+    # --- Bloque 2: Verificación del usuario ---
+    user = None
+    try:
+        user = await e.client.get_entity(userid)  # # Llamada a la API para obtener información básica
+        api_calls += 1  # Incrementar aquí
+        name = (f'<a href="tg://user?id={user.id}">{html.escape(user.first_name)}</a>')
+    except BaseException:
+        userid = int(userid)  # Convierte a entero si falla (conversación interna, no es llamada a la API)
+        name = str(userid)
+    
+    # Prevenir autobloqueo
+    if userid == ultroid_bot.uid:
+        return await xx.eor("`No puedes gbanearte a ti mismo`", time=3)
+    elif is_gbanned(userid):
+        return await e.eor("`El usuario ya está gbaneado`", time=4)
+
+    # --- Bloque 3: Aplicación del bloqueo en todos los chats ---
+    chats = 0  # Contador de chats afectados
+    dialog_cache = getattr(e.client, "_dialog_cache", None)  # Busca la caché de diálogos existente
+
+    if not dialog_cache:  # Si no hay caché, crea una nueva iterativamente
+        dialog_cache = []
+        async for dialog in e.client.iter_dialogs():  # Iteración para evitar carga completa
+            if dialog.is_group or dialog.is_channel:
+                dialog_cache.append(dialog)
+        e.client._dialog_cache = dialog_cache  # Almacena la caché temporalmente
+
+    for ggban in dialog_cache:  # Recorre los diálogos en la caché
+        if ggban.is_group or ggban.is_channel:  # Aplica solo a grupos o canales
+            try:
+                await e.client.edit_permissions(ggban.id, userid, view_messages=False)
+                api_calls += 1  # Incrementa el contador de llamadas
+                chats += 1
+            except FloodWaitError as fw:
+                LOGS.info(
+                    f"[FLOOD_WAIT_ERROR] : Comando `gban` pausado por {fw.seconds + 10}s"
+                )
+                await asyncio.sleep(fw.seconds + 10)  # Manejo de espera por límite de tiempo
+                try:
+                    await e.client.edit_permissions(
+                        gban.id, userid, view_messages=False
+                    )
+                    api_calls += 1  # Incrementa el contador de llamadas en reintento
+                    chats += 1
+                except BaseException as er:
+                    LOGS.exception(er)
+            except (ChatAdminRequiredError, ValueError):
+                pass  # Si no tiene permisos para administrar en un chat
+            except BaseException as er:
+                LOGS.exception(er)
+
+    # --- Bloque 4: Registro y bloqueo del usuario ---
+    gban(userid, reason)  # Registra el bloqueo global en la base de datos
+    if isinstance(user, User):
+        await e.client(BlockRequest(userid))  # Bloquea al usuario
+        api_calls += 1  # Incrementa el contador para esta llamada
+
+    # Obtén el estado actualizado el usuario completo después del bloqueo
+    try:
+        full_user = (await e.client(GetFullUserRequest(userid))).full_user  # Obtiene entidad completa
+        api_calls += 1  # Incrementa el contador de llamadas a la API
+        block_status = 'Sí✔' if full_user.blocked else 'No✘'
+    except Exception as error:
+        LOGS.exception(f"Error al verificar el estado de bloqueo del usuario {userid}: {error}")
+        block_status = 'No disponible'
+
+    # Registrar el tiempo de ejecución
+    execution_time = time.time() - start_time
+
+    # --- Bloque 5: Mensaje de confirmación ---
+    api_calls += 1  # Incrementa el contador al inicio del bloque 5
+
+    # Verifica si `name` parece ser un ID (6 o más números consecutivos) y reemplázalo por "No disponible"
+    if name.isdigit() and len(name) >= 6:
+        name = "<code>No disponible</code>"
+
+    gb_msg = f"<b>#GLOBALBAN</b>\n"
+    gb_msg += f"<b>• ɴᴏᴍʙʀᴇ</b> ⇝ {name}\n"
+    gb_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
+    gb_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} ban(s)</code>\n"
+    gb_msg += f"<b>• ʙʟᴏᴄᴋ</b> ⇝ <code>{block_status}</code>\n"
+    gb_msg += "━━━━━━━━━━━━\n"  # Separador
+    gb_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
+    gb_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
+    gb_msg += "━━━━━━━━━━━━\n"  # Separador
+    if reason:
+        gb_msg += f"<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{reason}</code>\n"
+    await xx.edit(gb_msg, parse_mode='html')
+
+
+# --- Sección 2: Comando .ungban ---
+@ultroid_cmd(pattern="ungban( (.*)|$)", fullsudo=True)
+async def _(e):
+    # Registrar el inicio del tiempo
+    start_time = time.time()
+
+    # Mensaje inicial mientras se procesa el comando
+    api_calls = 1  # Contador de llamadas a la API (inicia en 1 tras mandar el comando)
+    xx = await e.eor("`Restableciendo permisos y desbloqueando...`")
+    reason = ""
+    api_calls += 1  # Incrementamos el contador
+
+    # --- Bloque 1: Identificación del usuario y motivo ---
+    if e.reply_to_msg_id:
+        replied_msg = await e.get_reply_message()  # Llama a la API para obtener el mensaje respondido
+        api_calls += 1
+        userid = replied_msg.sender_id  # Extrae el ID del remitente del mensaje
+        try:
+            reason = e.text.split(" ", maxsplit=1)[1]
+        except IndexError:
+            reason = ""
     elif e.pattern_match.group(1).strip():
         usr = e.text.split(maxsplit=2)[1]
         try:
-            userid = await e.client.parse_id(usr)
+            userid = await e.client.parse_id(usr)  # Parsear el ID o username
+            api_calls += 1
         except ValueError:
             userid = usr
         try:
@@ -376,44 +456,51 @@ async def _(e):
         except IndexError:
             pass
     else:
-        return await xx.eor("`Reply to some msg or add their id.`", time=5)
+        return await xx.eor("`Responde a un mensaje o especifica un ID/username`", time=5)
+
+    # --- Bloque 2: Verificación del usuario ---
     user = None
     try:
         user = await e.client.get_entity(userid)
-        name = inline_mention(user)
+        api_calls += 1
+        name = (f'<a href="tg://user?id={user.id}">{html.escape(user.first_name)}</a>')
     except BaseException:
         userid = int(userid)
         name = str(userid)
-    chats = 0
+
+    # Prevenir errores innecesarios
     if userid == ultroid_bot.uid:
-        return await xx.eor("`I can't gban myself.`", time=3)
-    elif userid in DEVLIST:
-        return await xx.eor("`I can't gban my Developers.`", time=3)
-    elif is_gbanned(userid):
-        return await eod(
-            xx,
-            "`User is already gbanned and added to gbanwatch.`",
-            time=4,
-        )
-    if e.client._dialogs:
-        dialog = e.client._dialogs
-    else:
-        dialog = await e.client.get_dialogs()
-        e.client._dialogs.extend(dialog)
-    for ggban in dialog:
-        if ggban.is_group or ggban.is_channel:
+        return await xx.eor("`No puedes realizar esta acción contigo mismo.`", time=3)
+    elif not is_gbanned(userid):
+        return await e.eor("`El usuario no está gbaneado.`", time=4)
+
+    # --- Bloque 3: Eliminación de restricciones en todos los chats ---
+    chats = 0
+    dialog_cache = getattr(e.client, "_dialog_cache", None)
+
+    if not dialog_cache:
+        dialog_cache = []
+        async for dialog in e.client.iter_dialogs():
+            if dialog.is_group or dialog.is_channel:
+                dialog_cache.append(dialog)
+        e.client._dialog_cache = dialog_cache
+
+    for unggban in dialog_cache:
+        if unggban.is_group or unggban.is_channel:
             try:
-                await e.client.edit_permissions(ggban.id, userid, view_messages=False)
+                await e.client.edit_permissions(unggban.id, userid, view_messages=True)
+                api_calls += 1
                 chats += 1
             except FloodWaitError as fw:
                 LOGS.info(
-                    f"[FLOOD_WAIT_ERROR] : on GBAN Command\nSleeping for {fw.seconds+10}"
+                    f"[FLOOD_WAIT_ERROR] : Comando `unggban` pausado por {fw.seconds + 10}s"
                 )
                 await asyncio.sleep(fw.seconds + 10)
                 try:
                     await e.client.edit_permissions(
-                        ggban.id, userid, view_messages=False
+                        unggban.id, userid, view_messages=True
                     )
+                    api_calls += 1
                     chats += 1
                 except BaseException as er:
                     LOGS.exception(er)
@@ -421,13 +508,44 @@ async def _(e):
                 pass
             except BaseException as er:
                 LOGS.exception(er)
-    gban(userid, reason)
+
+    # --- Bloque 4: Eliminación del baneo global y desbloqueo ---
+    ungban(userid)  # Elimina el registro del bloqueo global
     if isinstance(user, User):
-        await e.client(BlockRequest(userid))
-    gb_msg = f"**#Gbanned** {name} `in {chats} chats and added to gbanwatch!`"
+        await e.client(UnblockRequest(userid))  # Desbloquea al usuario
+        api_calls += 1
+
+    # Obtén el estado actualizado el usuario completo después del bloqueo
+    try:
+        full_user = (await e.client(GetFullUserRequest(userid))).full_user  # Obtiene entidad completa
+        api_calls += 1  # Incrementa el contador de llamadas a la API
+        block_status = 'Sí✔' if full_user.blocked else 'No✘'
+    except Exception as error:
+        LOGS.exception(f"Error al verificar el estado de bloqueo del usuario {userid}: {error}")
+        block_status = 'No disponible'
+
+    # Registrar el tiempo de ejecución
+    execution_time = time.time() - start_time
+
+    # --- Bloque 5: Mensaje de confirmación ---
+    api_calls += 1  # Incrementa el contador al inicio del bloque 5
+
+    # Verifica si `name` parece ser un ID (6 o más números consecutivos) y reemplázalo por "No disponible"
+    if name.isdigit() and len(name) >= 6:
+        name = "<code>No disponible</code>"
+
+    unsuperban_msg = f"<b>#UNGLOBALBAN</b>\n"
+    unsuperban_msg += f"<b>• ɴᴏᴍʙʀᴇ</b> ⇝ {name}\n"
+    unsuperban_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
+    unsuperban_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} desbloqueado(s)</code>\n"
+    unsuperban_msg += f"<b>• ʙʟᴏᴄᴋ</b> ⇝ <code>{'No✘' if not full_user.blocked else 'Sí✔'}</code>\n"
+    unsuperban_msg += "━━━━━━━━━━━━\n"
+    unsuperban_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
+    unsuperban_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
+    unsuperban_msg += "━━━━━━━━━━━━\n"
     if reason:
-        gb_msg += f"\n**Reason** : {reason}"
-    await xx.edit(gb_msg)
+        unsuperban_msg += f"<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{reason}</code>\n"
+    await xx.edit(unsuperban_msg, parse_mode='html')
 
 
 @ultroid_cmd(pattern="g(admin|)cast( (.*)|$)", fullsudo=True)
