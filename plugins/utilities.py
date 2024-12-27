@@ -276,11 +276,11 @@ async def _(event):
         await xx.edit(reply_text)
 
 
-@ultroid_cmd(
-    pattern="info( (.*)|$)",
-    manager=True,
-)
+@ultroid_cmd(pattern="info( (.*)|$)", manager=True)
 async def _(event):
+    
+    
+    # Verifica si el comando tiene un `user_id/username` o si es un mensaje respondido
     if match := event.pattern_match.group(1).strip():
         try:
             user = await event.client.parse_id(match)
@@ -291,80 +291,175 @@ async def _(event):
         user = rpl.sender_id
     else:
         user = event.chat_id
+
+    # Mensaje temporal mientras se procesa la solicitud
     xx = await event.eor(get_string("com_1"))
+
     try:
+        # Verifica si el usuario es válido
         _ = await event.client.get_entity(user)
     except Exception as er:
         return await xx.edit(f"**ERROR :** {er}")
+    
+    # Si el objeto no es un usuario, se asume que es un chat o canal
     if not isinstance(_, User):
         try:
             peer = get_peer_id(_)
             photo, capt = await get_chat_info(_, event)
+            
+            # Si el chat está globalmente baneado, se agrega la información
             if is_gbanned(peer):
-                capt += "\n•<b> Is Gbanned:</b> <code>True</code>"
+                capt += "\n<b>• ɢʟᴏʙᴀʟ ʙᴀɴ</b> ⇝ <code>Sí✔</code>"
+            
+            # Si no hay foto, solo se envía el texto
             if not photo:
                 return await xx.eor(capt, parse_mode="html")
+            
+            # Envía la foto junto con la información
             await event.client.send_message(
                 event.chat_id, capt[:1024], file=photo, parse_mode="html"
             )
             await xx.delete()
         except Exception as er:
-            await event.eor("**ERROR ON CHATINFO**\n" + str(er))
+            # Define el mensaje de error según el contenido del error
+            if "The provided media object is invalid" in str(er):
+                error_msg = (
+                    "**ERROR AL ENVIAR INFORMACIÓN AL CHAT**\n"
+                    "'Hubo un problema con la foto o el archivo adjunto...'"
+                )
+            else:
+                error_msg = "**ERROR AL ENVIAR INFORMACIÓN AL CHAT**\n" + str(er)
+            await event.eor(error_msg)
         return
+
     try:
+        # Obtiene información completa del usuario usando GetFullUserRequest
         full_user = (await event.client(GetFullUserRequest(user))).full_user
     except Exception as er:
         return await xx.edit(f"ERROR : {er}")
+    
+    # Asigna los datos del usuario
     user = _
     user_photos = (
         await event.client.get_profile_photos(user.id, limit=0)
-    ).total or "NaN"
+    ).total or "0"
     user_id = user.id
     first_name = html.escape(user.first_name)
+    
+    # Limpia los posibles caracteres invisibles en el nombre
     if first_name is not None:
         first_name = first_name.replace("\u2060", "")
+    
     last_name = user.last_name
     last_name = (
-        last_name.replace("\u2060", "") if last_name else ("Last Name not found")
+        last_name.replace("\u2060", "") if last_name else ("No disponible")
     )
+    
     user_bio = full_user.about
     if user_bio is not None:
         user_bio = html.escape(full_user.about)
+    else:
+        user_bio = "No disponible"
+
+    # Aquí añadimos el username del usuario con @
+    username = f"@{user.username}" if user.username else "No disponible"
+    
     common_chats = full_user.common_chats_count
     if user.photo:
         dc_id = user.photo.dc_id
     else:
-        dc_id = "Need a Profile Picture to check this"
-    caption = """<b>Exᴛʀᴀᴄᴛᴇᴅ Dᴀᴛᴀ Fʀᴏᴍ Tᴇʟᴇɢʀᴀᴍ's Dᴀᴛᴀʙᴀsᴇ<b>
-<b>••Tᴇʟᴇɢʀᴀᴍ ID</b>: <code>{}</code>
-<b>••Pᴇʀᴍᴀɴᴇɴᴛ Lɪɴᴋ</b>: <a href='tg://user?id={}'>Click Here</a>
-<b>••Fɪʀsᴛ Nᴀᴍᴇ</b>: <code>{}</code>
-<b>••Sᴇᴄᴏɴᴅ Nᴀᴍᴇ</b>: <code>{}</code>
-<b>••Bɪᴏ</b>: <code>{}</code>
-<b>••Dᴄ ID</b>: <code>{}</code>
-<b>••Nᴏ. Oғ PғPs</b> : <code>{}</code>
-<b>••Is Rᴇsᴛʀɪᴄᴛᴇᴅ</b>: <code>{}</code>
-<b>••Vᴇʀɪғɪᴇᴅ</b>: <code>{}</code>
-<b>••Is Pʀᴇᴍɪᴜᴍ</b>: <code>{}</code>
-<b>••Is A Bᴏᴛ</b>: <code>{}</code>
-<b>••Gʀᴏᴜᴘs Iɴ Cᴏᴍᴍᴏɴ</b>: <code>{}</code>
+        dc_id = "Requiere foto de perfil"
+
+   # Obtiene el ID del remitente y asigna el teléfono del usuario consultado, protegiendo el del remitente.
+    remitente = await event.get_sender()  # Obtiene la información del remitente del mensaje
+    sender_id = remitente.id  # ID del remitente
+
+    # Verifica si el remitente está consultándose a sí mismo
+    is_self = user.id == sender_id
+
+    # Asigna el teléfono, protegiendo el del remitente
+    if is_self:
+        phone = "Bat-Señal 🦇"
+    elif user.phone:
+        phone = f"+{user.phone}" if not user.phone.startswith("+") else user.phone
+    else:
+        phone = "No disponible"
+
+    # Si es un bot asigna valores a los campos adicionales
+    bot_inline_placeholder = "Sí✔" if user.bot and user.bot_inline_placeholder else "No✘"
+    bot_nochats = "Sí✔" if user.bot and not user.bot_nochats else "No✘"
+
+    # Obtenemos la última conexión considerando todos los posibles estados
+    if isinstance(user.status, types.UserStatusOnline):
+        last_seen = "En línea ahora"
+    elif isinstance(user.status, types.UserStatusOffline):
+        last_seen = f"Última vez: {user.status.was_online.strftime('%d/%m/%Y %H:%M:%S')}"
+    elif isinstance(user.status, types.UserStatusRecently):
+        last_seen = "Activo recientemente (menos de un día)"
+    elif isinstance(user.status, types.UserStatusLastWeek):
+        last_seen = "Activo en la última semana"
+    elif isinstance(user.status, types.UserStatusLastMonth):
+        last_seen = "Activo en el último mes"
+    else:
+        last_seen = "Última conexión desconocida"
+
+    # Mensaje con la información del usuario
+    caption = """<b>* ᴰᵃᵗᵃˢᵉᵗ ᵖᵒʳ ᵀᵉˡᵉᵍʳᵃᵐ ᴬᴾᴵ</b>
+<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ <code>{}</code>
+<b>• ʟɪɴᴋ</b> ⇝ <a href='tg://user?id={}'>Mostrar</a>
+<b>• ɴᴏᴍʙʀᴇ</b> ⇝ <code>{}</code>
+<b>• ᴀᴘᴇʟʟɪᴅᴏꜱ</b> ⇝ <code>{}</code>
+<b>• ᴜsᴇʀɴᴀᴍᴇ</b> ⇝ <code>{}</code>
+<b>• ʙɪᴏ</b> ⇝ <code>{}</code>
+<b>• ᴘʜᴏɴᴇ</b> ⇝ <code>{}</code>
+<b>• ꜰᴏᴛᴏꜱ ᴇɴ ᴘᴇʀꜰɪʟ</b> ⇝ <code>{}</code>
+<b>• ᴅᴀᴛᴀ ᴄᴇɴᴛᴇʀ ɪᴅ</b> ⇝ <code>{}</code>
+<b>• ᴘʀᴏꜰɪʟᴇ ᴘʜᴏᴛᴏ ɪᴅ</b> ⇝ <code>{}</code>
+<b>• ᴄᴏɴᴛᴀᴄᴛᴏ</b> ⇝ <code>{}</code>
+<b>• ʙʟᴏᴄᴋ</b> ⇝ <code>{}</code>
+<b>• ʀᴇꜱᴛʀɪɴɢɪᴅᴏ</b> ⇝ <code>{}</code>
+<b>• ᴠᴇʀɪꜰɪᴄᴀᴅᴏ</b> ⇝ <code>{}</code>
+<b>• ᴘʀᴇᴍɪᴜᴍ</b> ⇝ <code>{}</code>
+<b>• ꜱᴄᴀᴍ</b> ⇝ <code>{}</code>
+<b>• ꜰᴀᴋᴇ</b> ⇝ <code>{}</code>
+<b>• ᴛᴇʟᴇɢʀᴀᴍ ꜱᴜᴘᴘᴏʀᴛ</b> ⇝ <code>{}</code>
+<b>• ʙᴏᴛ</b> ⇝ <code>{}</code>
+<b>• ʙᴏᴛ ɪɴʟɪɴᴇ</b> ⇝ <code>{}</code>
+<b>• ʙᴏᴛ ᴘᴇʀᴍɪᴛɪᴅᴏ ᴇɴ ɢʀᴜᴘᴏꜱ</b> ⇝ <code>{}</code>
+<b>• ɢʀᴜᴘᴏꜱ ᴄᴏᴍᴘᴀʀᴛɪᴅᴏꜱ</b> ⇝ <code>{}</code>
+<b>• ʀᴇɢɪꜱᴛʀᴏ ᴅᴇ ᴀᴄᴛɪᴠɪᴅᴀᴅ</b> ⇝ <code>{}</code>
 """.format(
-        user_id,
-        user_id,
-        first_name,
-        last_name,
-        user_bio,
-        dc_id,
-        user_photos,
-        user.restricted,
-        user.verified,
-        user.premium,
-        user.bot,
-        common_chats,
+    user_id,
+    user_id,
+    first_name,
+    last_name,
+    username,
+    user_bio,
+    phone,
+    user_photos,
+    dc_id,
+    user.photo.photo_id if user.photo else "No disponible",
+    "Sí✔" if user.contact else "No✘",
+    "Sí✔" if full_user.blocked else "No✘",
+    "Sí✔" if user.restricted else "No✘",
+    "Sí✔" if user.verified else "No✘",
+    "Sí✔" if user.premium else "No✘",
+    "Sí✔" if user.scam else "No✘",
+    "Sí✔" if user.fake else "No✘",
+    "Sí✔" if user.support else "No✘",
+    "Sí✔" if user.bot else "No✘",
+    bot_inline_placeholder,
+    bot_nochats,
+    common_chats,
+    last_seen, 
     )
+
+    
+    # Si el usuario está globalmente baneado, se agrega la información correspondiente
     if chk := is_gbanned(user_id):
-        caption += f"""<b>••Gʟᴏʙᴀʟʟʏ Bᴀɴɴᴇᴅ</b>: <code>True</code>
-<b>••Rᴇᴀsᴏɴ</b>: <code>{chk}</code>"""
+        caption += f"<b>• ꜱᴜᴘᴇʀʙᴀɴ</b> ⇝ <code>Sí✔</code>\n<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{chk}</code>"
+    
+    # Envía la información con la foto de perfil (si está disponible)
     await event.client.send_message(
         event.chat_id,
         caption,
@@ -374,6 +469,8 @@ async def _(event):
         force_document=False,
         silent=True,
     )
+    
+    # Elimina el mensaje temporal
     await xx.delete()
 
 
