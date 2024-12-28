@@ -1,4 +1,4 @@
-# Required only for Termux Deploys
+# Required only for Termux deployments
 # ------------------------------------------------------ #
 
 requests 
