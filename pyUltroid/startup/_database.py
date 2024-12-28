@@ -386,28 +386,6 @@ def UltroidDB():
             return SqlDB(Var.DATABASE_URL)
         elif SQLiteConnection:  # Agregado para manejar SQLite
             return SQLiteDatabase(Var.SQLITE_DB_PATH)
-
-def UltroidDB():
-    _er = False
-    from .. import HOSTED_ON
-
-    try:
-        if Redis:
-            return RedisDB(
-                host=Var.REDIS_URI or Var.REDISHOST,
-                password=Var.REDIS_PASSWORD or Var.REDISPASSWORD,
-                port=Var.REDISPORT,
-                platform=HOSTED_ON,
-                decode_responses=True,
-                socket_timeout=5,
-                retry_on_timeout=True,
-            )
-        elif MongoClient:
-            return MongoDB(Var.MONGO_URI)
-        elif psycopg2:
-            return SqlDB(Var.DATABASE_URL)
-        elif SQLiteConnection:  # Agregado para manejar SQLite
-            return SQLiteDatabase(Var.SQLITE_DB_PATH)
         else:
             LOGS.critical(
                 "No DB requirement fulfilled!\nPlease install redis, mongo, sql, or sqlite dependencies...\nTill then using local file as database."
