@@ -325,7 +325,12 @@ class SQLiteDatabase(_BaseDatabase):
             LOGS.error(f"Error connecting to SQLite database: {e}")
             raise
 
-    def _get_data(self, key):
+    def _get_data(self, key=None, data=None):
+        if data is not None:  # Si `data` es proporcionado, lo usamos como `key`
+            key = data
+        if key is None:  # Verificamos que se haya proporcionado un valor para `key`
+            LOGS.error("No key or data provided to _get_data.")
+            return None
         try:
             self.cursor.execute("SELECT value FROM kv_store WHERE key = ?", (key,))
             result = self.cursor.fetchone()
