@@ -20,10 +20,6 @@ Redis = MongoClient = psycopg2 = Database = SQLiteConnection = None
 if Var.REDIS_URI or Var.REDISHOST:
     try:
         from redis import Redis
-
-if Var.REDIS_URI or Var.REDISHOST:
-    try:
-        from redis import Redis
     except ImportError:
         LOGS.info("Installing 'redis' for database.")
         os.system(f"{sys.executable} -m pip install -q redis hiredis")
