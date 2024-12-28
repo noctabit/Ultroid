@@ -315,10 +315,15 @@ class RedisDB(_BaseDatabase):
 
 
 class SQLiteDatabase(_BaseDatabase):
-    def __init__(self, connection, *args, **kwargs):
+    def __init__(self, db_path, *args, **kwargs):
+        import sqlite3  # Importamos sqlite3 en el constructor
         super().__init__(*args, **kwargs)
-        self.connection = connection
-        self.cursor = self.connection.cursor()
+        try:
+            self.connection = sqlite3.connect(db_path)  # Establecemos conexión a SQLite
+            self.cursor = self.connection.cursor()  # Inicializamos el cursor
+        except sqlite3.Error as e:
+            LOGS.error(f"Error connecting to SQLite database: {e}")
+            raise
 
     def _get_data(self, key):
         try:
