@@ -386,7 +386,8 @@ def UltroidDB():
             return SqlDB(Var.DATABASE_URL)
         elif SQLiteConnection:  # Agregado para manejar SQLite
             return SQLiteDatabase(Var.SQLITE_DB_PATH)
-        def UltroidDB():
+
+def UltroidDB():
     _er = False
     from .. import HOSTED_ON
 
