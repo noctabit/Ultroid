@@ -384,6 +384,8 @@ def UltroidDB():
             return MongoDB(Var.MONGO_URI)
         elif psycopg2:
             return SqlDB(Var.DATABASE_URL)
+        elif SQLiteConnection:  # Agregado para manejar SQLite
+            return SQLiteDatabase(Var.SQLITE_DB_PATH)
         def UltroidDB():
     _er = False
     from .. import HOSTED_ON
@@ -404,7 +406,7 @@ def UltroidDB():
         elif psycopg2:
             return SqlDB(Var.DATABASE_URL)
         elif SQLiteConnection:  # Agregado para manejar SQLite
-    return SQLiteDatabase(Var.SQLITE_DB_PATH)
+            return SQLiteDatabase(Var.SQLITE_DB_PATH)
         else:
             LOGS.critical(
                 "No DB requirement fulfilled!\nPlease install redis, mongo, sql, or sqlite dependencies...\nTill then using local file as database."
