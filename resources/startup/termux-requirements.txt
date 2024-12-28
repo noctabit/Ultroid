@@ -1,0 +1,17 @@
+# Required only for Termux Deploys
+# ------------------------------------------------------ #
+
+requests 
+coloredlogs 
+enhancer 
+pillow 
+gitpython 
+aiohttp 
+pytz 
+telegraph 
+bs4 
+qrcode 
+yt_dlp 
+akinator 
+youtube-search-python  
+# -------------------------------------------------------#
