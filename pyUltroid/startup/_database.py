@@ -16,7 +16,11 @@ if run_as_module:
     from ..configs import Var
 
 
-Redis = MongoClient = psycopg2 = Database = None
+Redis = MongoClient = psycopg2 = Database = SQLiteConnection = None
+if Var.REDIS_URI or Var.REDISHOST:
+    try:
+        from redis import Redis
+
 if Var.REDIS_URI or Var.REDISHOST:
     try:
         from redis import Redis
@@ -38,6 +42,19 @@ elif Var.DATABASE_URL:
         LOGS.info("Installing 'pyscopg2' for database.")
         os.system(f"{sys.executable} -m pip install -q psycopg2-binary")
         import psycopg2
+elif Var.SQLITE_DB_PATH:
+    try:
+        import sqlite3
+        SQLiteConnection = sqlite3.connect(Var.SQLITE_DB_PATH)
+        LOGS.info(f"SQLite database connected at {Var.SQLITE_DB_PATH}.")
+    except ImportError:
+        LOGS.info("SQLite is not installed. Installing 'sqlite3'.")
+        os.system(f"{sys.executable} -m pip install -q sqlite3")
+        import sqlite3
+        SQLiteConnection = sqlite3.connect(Var.SQLITE_DB_PATH)
+    except sqlite3.Error as e:
+        LOGS.error(f"Failed to connect to SQLite database: {e}")
+        SQLiteConnection = None
 else:
     try:
         from localdb import Database
@@ -301,6 +318,38 @@ class RedisDB(_BaseDatabase):
 # --------------------------------------------------------------------------------------------- #
 
 
+class SQLiteDatabase(_BaseDatabase):
+    def __init__(self, connection, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.connection = connection
+        self.cursor = self.connection.cursor()
+
+    def _get_data(self, key):
+        try:
+            self.cursor.execute("SELECT value FROM kv_store WHERE key = ?", (key,))
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except sqlite3.Error as e:
+            LOGS.error(f"SQLite error while getting data: {e}")
+            return None
+
+    def _set_data(self, key, value):
+        try:
+            self.cursor.execute("REPLACE INTO kv_store (key, value) VALUES (?, ?)", (key, value))
+            self.connection.commit()
+        except sqlite3.Error as e:
+            LOGS.error(f"SQLite error while setting data: {e}")
+
+    def close(self):
+        try:
+            self.connection.close()
+        except sqlite3.Error as e:
+            LOGS.error(f"Error closing SQLite connection: {e}")
+
+
+# --------------------------------------------------------------------------------------------- #
+
+
 class LocalDB(_BaseDatabase):
     def __init__(self):
         self.db = Database("ultroid")
@@ -339,9 +388,30 @@ def UltroidDB():
             return MongoDB(Var.MONGO_URI)
         elif psycopg2:
             return SqlDB(Var.DATABASE_URL)
+        def UltroidDB():
+    _er = False
+    from .. import HOSTED_ON
+
+    try:
+        if Redis:
+            return RedisDB(
+                host=Var.REDIS_URI or Var.REDISHOST,
+                password=Var.REDIS_PASSWORD or Var.REDISPASSWORD,
+                port=Var.REDISPORT,
+                platform=HOSTED_ON,
+                decode_responses=True,
+                socket_timeout=5,
+                retry_on_timeout=True,
+            )
+        elif MongoClient:
+            return MongoDB(Var.MONGO_URI)
+        elif psycopg2:
+            return SqlDB(Var.DATABASE_URL)
+        elif SQLiteConnection:  # Agregado para manejar SQLite
+    return SQLiteDatabase(Var.SQLITE_DB_PATH)
         else:
             LOGS.critical(
-                "No DB requirement fullfilled!\nPlease install redis, mongo or sql dependencies...\nTill then using local file as database."
+                "No DB requirement fulfilled!\nPlease install redis, mongo, sql, or sqlite dependencies...\nTill then using local file as database."
             )
             return LocalDB()
     except BaseException as err:
