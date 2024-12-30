@@ -18,7 +18,7 @@
 
 • `{i}paste` - `Include long text / Reply to text file.`
 
-• `{i}info <username/userid/chatid>`
+• `{i}superinfo <username/userid/chatid>`
     Reply to someone's msg.
 
 • `{i}invite <username/userid>`
@@ -278,7 +278,7 @@ async def _(event):
         await xx.edit(reply_text)
 
 
-@ultroid_cmd(pattern="info( (.*)|$)", manager=True)
+@ultroid_cmd(pattern="superinfo( (.*)|$)", manager=True)
 async def _(event):
     
     
