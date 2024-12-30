@@ -518,7 +518,7 @@ async def _(e):
 
     # Considera el estado de bloqueo del usuario a partir de {chats}
     try:
-        block_status = 'No✘' if chats > 0 else 'No determinado⁉️' # Considera el bloqueo en base a chats
+        block_status = 'Sí✔' if chats > 0 else 'No✘'
     except Exception as error:
         LOGS.exception(f"Error al verificar el estado de bloqueo del usuario {userid}: {error}")
         block_status = 'No disponible'
@@ -537,7 +537,7 @@ async def _(e):
     unsuperban_msg += f"<b>• ɴᴏᴍʙʀᴇ</b> ⇝ {name}\n"
     unsuperban_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
     unsuperban_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} desbloqueado(s)</code>\n"
-    unsuperban_msg += f"<b>• ʙʟᴏᴄᴋ</b> ⇝ <code>{'No✘' if not full_user.blocked else 'Sí✔'}</code>\n"
+    unsuperban_msg += f"<b>• ᴜɴʙʟᴏᴄᴋ</b> ⇝ <code>{block_status}</code>\n"
     unsuperban_msg += "━━━━━━━━━━━━\n"
     unsuperban_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
     unsuperban_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
