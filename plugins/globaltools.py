@@ -41,9 +41,9 @@ import asyncio
 import os
 import html
 import time
+
 from telethon.errors.rpcerrorlist import ChatAdminRequiredError, FloodWaitError
 from telethon.tl.functions.channels import EditAdminRequest
-from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.functions.contacts import BlockRequest, UnblockRequest
 from telethon.tl.types import ChatAdminRights, User
 
@@ -387,11 +387,9 @@ async def _(e):
         await e.client(BlockRequest(userid))  # Bloquea al usuario
         api_calls += 1  # Incrementa el contador para esta llamada
 
-    # Obtén el estado actualizado el usuario completo después del bloqueo
+    # Considera el estado de bloqueo del usuario a partir de {chats}
     try:
-        full_user = (await e.client(GetFullUserRequest(userid))).full_user  # Obtiene entidad completa
-        api_calls += 1  # Incrementa el contador de llamadas a la API
-        block_status = 'Sí✔' if full_user.blocked else 'No✘'
+        block_status = 'Sí✔' if chats > 0 else 'No✘'
     except Exception as error:
         LOGS.exception(f"Error al verificar el estado de bloqueo del usuario {userid}: {error}")
         block_status = 'No disponible'
@@ -518,11 +516,9 @@ async def _(e):
         await e.client(UnblockRequest(userid))  # Desbloquea al usuario
         api_calls += 1
 
-    # Obtén el estado actualizado el usuario completo después del bloqueo
+    # Considera el estado de bloqueo del usuario a partir de {chats}
     try:
-        full_user = (await e.client(GetFullUserRequest(userid))).full_user  # Obtiene entidad completa
-        api_calls += 1  # Incrementa el contador de llamadas a la API
-        block_status = 'Sí✔' if full_user.blocked else 'No✘'
+        block_status = 'No✘' if chats > 0 else 'No determinado⁉️' # Considera el bloqueo en base a chats
     except Exception as error:
         LOGS.exception(f"Error al verificar el estado de bloqueo del usuario {userid}: {error}")
         block_status = 'No disponible'
