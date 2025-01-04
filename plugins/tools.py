@@ -63,7 +63,7 @@ from telethon.tl.types import (
     DocumentAttributeVideo,
 )
 
-from pyUltroid.fns.tools import metadata, translate
+from pyUltroid.fns.tools import metadata
 
 from . import (
     HNDLR,
@@ -79,31 +79,6 @@ from . import (
 )
 from . import humanbytes as hb
 from . import inline_mention, is_url_ok, json_parser, mediainfo, ultroid_cmd
-
-
-@ultroid_cmd(pattern="tr( (.*)|$)", manager=True)
-async def _(event):
-    input = event.pattern_match.group(1).strip().split(maxsplit=1)
-    txt = input[1] if len(input) > 1 else None
-    if input:
-        input = input[0]
-    if txt:
-        text = txt
-    elif event.is_reply:
-        previous_message = await event.get_reply_message()
-        text = previous_message.message
-    else:
-        return await eor(
-            event, f"`{HNDLR}tr LanguageCode` as reply to a message", time=5
-        )
-    lan = input or "en"
-    try:
-        tt = translate(text, lang_tgt=lan)
-        output_str = f"**TRANSLATED** to {lan}\n{tt}"
-        await event.eor(output_str)
-    except Exception as exc:
-        LOGS.exception(exc)
-        await event.eor(str(exc), time=5)
 
 
 @ultroid_cmd(
