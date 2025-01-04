@@ -1,7 +1,11 @@
 import os
 import sys
+import warnings  # Importamos warnings para configurar el rastreo de errores.
 from glob import glob
 from typing import Any, Dict, List, Union
+
+# Configurar warnings para convertir SyntaxWarning en errores rastreables.
+warnings.filterwarnings("error", category=SyntaxWarning)
 
 from pyUltroid import *
 from pyUltroid.fns.tools import translate
