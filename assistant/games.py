@@ -6,9 +6,6 @@
 # <https://www.github.com/TeamUltroid/Ultroid/blob/main/LICENSE/>.
 
 """
-• `{i}akinator` | `/akinator`
-   Start akinator game from Userbot/Assistant
-
 • `/startgame`
    Open Portal for Games
 """
@@ -16,7 +13,6 @@
 import asyncio
 import re
 
-from akipy.async_akipy import Akinator, akipyLOGS
 from telethon.errors.rpcerrorlist import BotMethodInvalidError
 from telethon.events import Raw
 from telethon.tl.types import InputMediaPoll, Poll, PollAnswer, UpdateMessagePollVote
@@ -27,116 +23,12 @@ from pyUltroid.fns.tools import async_searcher
 
 from . import *  # Ensure this import matches your project structure
 
-games = {}
-aki_photo = "https://graph.org/file/3cc8825c029fd0cab9edc.jpg"
-
-
-@ultroid_cmd(pattern="akinator")
-async def akina(e):
-    sta = Akinator()
-    games[e.chat_id] = {e.id: sta}
-    LOGS.info(f"Game started for chat {e.chat_id} with ID {e.id}.")
-    try:
-        m = await e.client.inline_query(asst.me.username, f"aki_{e.chat_id}_{e.id}")
-        await m[0].click(e.chat_id)
-        akipyLOGS.info(f"Clicked inline result for chat {e.chat_id}")
-    except BotMethodInvalidError as err:
-        akipyLOGS.error(f"BotMethodInvalidError: {err}")
-        await asst.send_file(
-            e.chat_id,
-            aki_photo,
-            buttons=Button.inline(get_string("aki_2"), data=f"aki_{e.chat_id}_{e.id}"),
-        )
-    except Exception as er:
-        akipyLOGS.error(f"Unexpected error: {er}")
-        return await e.eor(f"ERROR : {er}")
-    if e.out:
-        await e.delete()
-
-
-@asst_cmd(pattern="akinator", owner=True)
-async def _akokk(e):
-    await akina(e)
-
-
-@callback(re.compile("aki_(.*)"), owner=True)
-async def doai(e):
-    adt = e.pattern_match.group(1).strip().decode("utf-8")
-    dt = adt.split("_")
-    ch = int(dt[0])
-    mid = int(dt[1])
-    await e.edit(get_string("com_1"))
-    try:
-        await games[ch][mid].start_game(child_mode=False)
-        bts = [Button.inline(o, f"aka_{adt}_{o}") for o in ["Yes", "No", "Idk"]]
-        cts = [Button.inline(o, f"aka_{adt}_{o}") for o in ["Probably", "Probably Not"]]
-        bts = [bts, cts]
-        await e.edit(f"Q. {games[ch][mid].question}", buttons=bts)
-    except KeyError:
-        return await e.answer(get_string("aki_1"), alert=True)
-
-
-@callback(re.compile("aka_(.*)"), owner=True)
-async def okah(e):
-    try:
-        mk = e.pattern_match.group(1).decode("utf-8").split("_")
-        #akipyLOGS.info(f"Parsed values: {mk}")
-
-        if len(mk) < 3:
-            akipyLOGS.error("Pattern match did not return enough parts.")
-            return await e.answer("Invalid data received.", alert=True)
-
-        ch = int(mk[0])
-        mid = int(mk[1])
-        ans = mk[2]
-
-        gm = games[ch][mid]
-        await gm.answer(ans)
-
-        # Check for the final guess in the API response
-        if gm.name_proposition and gm.description_proposition:
-            gm.win = True
-            text = f"It's {gm.name_proposition}\n{gm.description_proposition}"
-            await e.edit(text, file=gm.photo)
-        else:
-            # Game is not won yet, continue asking questions
-            buttons = [
-                [Button.inline(o, f"aka_{ch}_{mid}_{o}") for o in ["Yes", "No", "Idk"]],
-                [Button.inline(o, f"aka_{ch}_{mid}_{o}") for o in ["Probably", "Probably Not"]],
-            ]
-            await e.edit(gm.question, buttons=buttons)
-
-    except KeyError:
-        await e.answer(get_string("aki_3"))
-    except Exception as ex:
-        akipyLOGS.error(f"An unexpected error occurred: {ex}")
-
-
-@in_pattern(re.compile("aki_?(.*)"), owner=True)
-async def eiagx(e):
-    bts = Button.inline(get_string("aki_2"), data=e.text)
-    ci = types.InputWebDocument(aki_photo, 0, "image/jpeg", [])
-    ans = [
-        await e.builder.article(
-            "Akinator",
-            type="photo",
-            content=ci,
-            text="Akinator",
-            thumb=ci,
-            buttons=bts,
-            include_media=True,
-        )
-    ]
-    await e.answer(ans)
-
-
 # ----------------------- Main Command ------------------- #
 
 GIMAGES = [
     "https://graph.org/file/1c51015bae5205a65fd69.jpg",
     "https://imgwhale.xyz/3xyr322l64j9590",
 ]
-
 
 @asst_cmd(pattern="startgame", owner=True)
 async def magic(event):
@@ -149,7 +41,6 @@ async def magic(event):
         file=choice(GIMAGES),
         buttons=buttons,
     )
-
 
 # -------------------------- Trivia ----------------------- #
 
@@ -167,17 +58,14 @@ CONGO_STICKER = [
     "CAADAgADiwMAAsSraAuoe2BwYu1sdQI",
 ]
 
-
 @callback("delit", owner=True)
 async def delete_it(event):
     await event.delete()
-
 
 @callback(re.compile("ctdown(.*)"), owner=True)
 async def ct_spam(e):
     n = e.data_match.group(1).decode("utf-8")
     await e.answer(f"Wait {n} seconds..", alert=True)
-
 
 @callback(re.compile("trzia(.*)"), owner=True)
 async def choose_cata(event):
@@ -293,7 +181,6 @@ async def choose_cata(event):
         return
     await event.edit(text, buttons=buttons)
 
-
 @asst.on(
     Raw(UpdateMessagePollVote, func=lambda x: TRIVIA_CHATS and POLLS.get(x.poll_id))
 )
@@ -308,6 +195,12 @@ async def pollish(eve):
         TRIVIA_CHATS[chat][user] = 1
     else:
         TRIVIA_CHATS[chat][user] += 1
+
+@asst_cmd("cancel", owner=True, func=lambda x: TRIVIA_CHATS.get(x.chat_id))
+async def cancelish(event):
+    chat = TRIVIA_CHATS.get(event.chat_id)
+    chat.update({"cancel": True})
+    await event.respond("Cancelled!")
 
 
 @asst_cmd("cancel", owner=True, func=lambda x: TRIVIA_CHATS.get(x.chat_id))
