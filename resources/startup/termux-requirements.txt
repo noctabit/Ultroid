@@ -12,7 +12,7 @@ telegraph
 bs4 
 qrcode 
 yt_dlp 
-akinator
+pywit
 googletrans
 youtube-search-python  
 # -------------------------------------------------------#
