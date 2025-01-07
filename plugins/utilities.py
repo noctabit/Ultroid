@@ -36,8 +36,6 @@
 • `{i}suggest <reply to message> or <poll title>`
     Create a Yes/No poll for the replied suggestion.
 
-• `{i}ipinfo <ipAddress>` : Get info about that IP address.
-
 • `{i}cpy <reply to message>`
    Copy the replied message, with formatting. Expires in 24hrs.
 • `{i}pst`
@@ -691,54 +689,6 @@ async def sugg(event):
     except Exception as e:
         return await eod(event, f"`Oops, you can't send polls here!\n\n{e}`")
     await event.delete()
-
-
-@ultroid_cmd(pattern="ipinfo( (.*)|$)")
-async def ipinfo(event):
-    ip = event.text.split()
-    ipaddr = ""
-    try:
-        ipaddr = f"/{ip[1]}"
-    except IndexError:
-        ipaddr = ""
-    det = await async_searcher(f"https://ipinfo.io{ipaddr}/geo", re_json=True)
-    try:
-        ip = det["ip"]
-        city = det["city"]
-        region = det["region"]
-        country = det["country"]
-        cord = det["loc"]
-        try:
-            zipc = det["postal"]
-        except KeyError:
-            zipc = "None"
-        tz = det["timezone"]
-        await eor(
-            event,
-            """
-**IP Details Fetched.**
-
-**IP:** `{}`
-**City:** `{}`
-**Region:** `{}`
-**Country:** `{}`
-**Co-ordinates:** `{}`
-**Postal Code:** `{}`
-**Time Zone:** `{}`
-""".format(
-                ip,
-                city,
-                region,
-                country,
-                cord,
-                zipc,
-                tz,
-            ),
-        )
-    except BaseException:
-        err = det["error"]["title"]
-        msg = det["error"]["message"]
-        await event.eor(f"ERROR:\n{err}\n{msg}", time=5)
 
 
 @ultroid_cmd(
