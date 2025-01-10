@@ -42,6 +42,7 @@ class Var:
     VC_SESSION = config("VC_SESSION", default=None)
     ADDONS = config("ADDONS", default=False, cast=bool)
     VCBOT = config("VCBOT", default=False, cast=bool)
+    WIT_CAT = config("WIT_CAT", default=None) # WIT.ai (opcional)
     # for sql
     DATABASE_URL = config("DATABASE_URL", default=None)
     # for MONGODB users
