@@ -92,12 +92,7 @@ def ultroid_cmd(
                     return await eod(ult, get_string("py_d2"), time=15)
             chat = ult.chat
             if hasattr(chat, "title"):
-                if (
-                    "#noub" in chat.title.lower()
-                    and not (chat.admin_rights or chat.creator)
-                    and not (ult.sender_id in DEVLIST)
-                ):
-                    return
+                pass  # Eliminado el bloque de verificación del título del chat
             if ult.is_private and (groups_only or admins_only):
                 return await eod(ult, get_string("py_d3"))
             elif admins_only and not (chat.admin_rights or chat.creator):
