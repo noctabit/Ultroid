@@ -95,6 +95,12 @@ _gdemote_rights = ChatAdminRights(
 keym = KeyManager("GBLACKLISTS", cast=list)
 
 
+# Función de borrado de mensajes en 2 plano
+async def delayed_delete(message):
+    await asyncio.sleep(60)
+    await message.delete()
+    
+
 @ultroid_cmd(pattern="gpromote( (.*)|$)", fullsudo=True)
 async def _(e):
     x = e.pattern_match.group(1).strip()
@@ -364,18 +370,36 @@ async def _(e):
                 api_calls += 1  # Incrementa el contador de llamadas
                 chats += 1
             except FloodWaitError as fw:
-                LOGS.info(
-                    f"[FLOOD_WAIT_ERROR] : Comando `gban` pausado por {fw.seconds + 10}s"
-                )
-                await asyncio.sleep(fw.seconds + 10)  # Manejo de espera por límite de tiempo
-                try:
-                    await e.client.edit_permissions(
-                        gban.id, userid, view_messages=False
-                    )
-                    api_calls += 1  # Incrementa el contador de llamadas en reintento
-                    chats += 1
-                except BaseException as er:
-                    LOGS.exception(er)
+                chat_title = ggban.title or "Desconocido"
+                chat_id = ggban.id
+                if fw.seconds <= 60:  # FloodWait menor o igual a 60 segundos
+                    LOGS.info(f"[FLOOD_WAIT_ERROR] : Esperando {fw.seconds}s antes de continuar.")
+                    await asyncio.sleep(fw.seconds)  # Espera y continúa
+                    try:
+                        await e.client.edit_permissions(ggban.id, userid, view_messages=False)
+                        api_calls += 1  # Incrementa el contador de llamadas en reintento
+                        chats += 1
+                    except BaseException as er:
+                        LOGS.exception(er)
+                else:  # FloodWait mayor a 60 segundos
+                    LOGS.info(f"[FLOOD_WAIT_ERROR] : Interrumpido en {chat_title} ({chat_id}) por {fw.seconds}s.")
+                    execution_time = time.time() - start_time  # Tiempo total de ejecución
+                    exit_msg = f"<b>#GLOBALBAN</b>\n"
+                    exit_msg += f"<b>* ᴺᵒ ᶜᵒᵐᵖˡᵉᵗᵃᵈᵒ ᵖᵒʳ ᶠˡᵒᵒᵈ ʷᵃᶦᵗ</b>\n"
+                    exit_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
+                    exit_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} ban(s)</code>\n"
+                    exit_msg += f"<b>• ʙʟᴏᴄᴋ</b> ⇝ <code>No✘</code>\n"
+                    exit_msg += "━━━━━━━━━━━━\n"  # Separador
+                    exit_msg += f"<b>• ꜰʟᴏᴏᴅᴡᴀɪᴛ</b> ⇝ <code>{fw.seconds}s</code>\n"
+                    exit_msg += f"<b>• ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴄʜᴀᴛ</b> ⇝ <code>{chat_title} ({chat_id})</code>\n"
+                    exit_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
+                    exit_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
+                    exit_msg += "━━━━━━━━━━━━\n"  # Separador
+                    if reason:
+                        exit_msg += f"<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{reason}</code>\n"
+                    await xx.edit(exit_msg, parse_mode='html')
+                    asyncio.create_task(delayed_delete(xx)) # Espera X segundos y elimina el mensaje
+                    return  # Salir directamente del comando
             except (ChatAdminRequiredError, ValueError):
                 pass  # Si no tiene permisos para administrar en un chat
             except BaseException as er:
@@ -416,6 +440,7 @@ async def _(e):
     if reason:
         gb_msg += f"<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{reason}</code>\n"
     await xx.edit(gb_msg, parse_mode='html')
+    asyncio.create_task(delayed_delete(xx)) # Espera X segundos y elimina el mensaje
 
 
 # --- Sección 2: Comando .ungban ---
@@ -493,18 +518,34 @@ async def _(e):
                 api_calls += 1
                 chats += 1
             except FloodWaitError as fw:
-                LOGS.info(
-                    f"[FLOOD_WAIT_ERROR] : Comando `unggban` pausado por {fw.seconds + 10}s"
-                )
-                await asyncio.sleep(fw.seconds + 10)
-                try:
-                    await e.client.edit_permissions(
-                        unggban.id, userid, view_messages=True
-                    )
-                    api_calls += 1
-                    chats += 1
-                except BaseException as er:
-                    LOGS.exception(er)
+                chat_title = unggban.title or "Desconocido"
+                chat_id = unggban.id
+                if fw.seconds <= 60:
+                    LOGS.info(f"[FLOOD_WAIT_ERROR] : Esperando {fw.seconds}s antes de continuar.")
+                    await asyncio.sleep(fw.seconds)
+                    try:
+                        await e.client.edit_permissions(unggban.id, userid, view_messages=True)
+                        api_calls += 1
+                        chats += 1
+                    except BaseException as er:
+                        LOGS.exception(er)
+                else:
+                    LOGS.info(f"[FLOOD_WAIT_ERROR] : Interrumpiendo operación por {fw.seconds}s.")
+                    execution_time = time.time() - start_time
+                    exit_msg = f"<b>#UNGLOBALBAN</b>\n"
+                    exit_msg += f"<b>* ᴺᵒ ᶜᵒᵐᵖˡᵉᵗᵃᵈᵒ ᵖᵒʳ ᶠˡᵒᵒᵈ ʷᵃᶦᵗ</b>\n"
+                    exit_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
+                    exit_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} desbloqueado(s)</code>\n"
+                    exit_msg += f"<b>• ᴜɴʙʟᴏᴄᴋ</b> ⇝ <code>No✘</code>\n"
+                    exit_msg += "━━━━━━━━━━━━\n"
+                    exit_msg += f"<b>• ꜰʟᴏᴏᴅᴡᴀɪᴛ</b> ⇝ <code>{fw.seconds}s</code>\n"
+                    exit_msg += f"<b>• ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴄʜᴀᴛ</b> ⇝ <code>{chat_title} ({chat_id})</code>\n"
+                    exit_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
+                    exit_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
+                    exit_msg += "━━━━━━━━━━━━\n"
+                    await xx.edit(exit_msg, parse_mode='html')
+                    asyncio.create_task(delayed_delete(xx)) # Espera X segundos y elimina el mensaje
+                    return # Salir directamente del comando
             except (ChatAdminRequiredError, ValueError):
                 pass
             except BaseException as er:
@@ -533,19 +574,20 @@ async def _(e):
     if name.isdigit() and len(name) >= 6:
         name = "<code>No disponible</code>"
 
-    unsuperban_msg = f"<b>#UNGLOBALBAN</b>\n"
-    unsuperban_msg += f"<b>• ɴᴏᴍʙʀᴇ</b> ⇝ {name}\n"
-    unsuperban_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
-    unsuperban_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} desbloqueado(s)</code>\n"
-    unsuperban_msg += f"<b>• ᴜɴʙʟᴏᴄᴋ</b> ⇝ <code>{block_status}</code>\n"
-    unsuperban_msg += "━━━━━━━━━━━━\n"
-    unsuperban_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
-    unsuperban_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
-    unsuperban_msg += "━━━━━━━━━━━━\n"
+    ungb_msg = f"<b>#UNGLOBALBAN</b>\n"
+    ungb_msg += f"<b>• ɴᴏᴍʙʀᴇ</b> ⇝ {name}\n"
+    ungb_msg += f"<b>• ᴛᴇʟᴇɢʀᴀᴍ ɪᴅ</b> ⇝ {userid}\n"
+    ungb_msg += f"<b>• ᴄʜᴀᴛꜱ</b> ⇝ <code>{chats} desbloqueado(s)</code>\n"
+    ungb_msg += f"<b>• ᴜɴʙʟᴏᴄᴋ</b> ⇝ <code>{block_status}</code>\n"
+    ungb_msg += "━━━━━━━━━━━━\n"
+    ungb_msg += f"<b>• ᴀᴘɪ ᴄᴀʟʟꜱ</b> ⇝ <code>{api_calls}</code>\n"
+    ungb_msg += f"<b>• ᴛɪᴇᴍᴘᴏ ᴄᴏᴍᴘᴜᴛᴀᴅᴏ</b> ⇝ <code>{execution_time:.2f}s</code>\n"
+    ungb_msg += "━━━━━━━━━━━━\n"
     if reason:
-        unsuperban_msg += f"<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{reason}</code>\n"
-    await xx.edit(unsuperban_msg, parse_mode='html')
-
+        ungb_msg += f"<b>• ᴍᴏᴛɪᴠᴏ</b> ⇝ <code>{reason}</code>\n"
+    await xx.edit(ungb_msg, parse_mode='html')
+    asyncio.create_task(delayed_delete(xx)) # Espera X segundos y elimina el mensaje
+    
 
 @ultroid_cmd(pattern="g(admin|)cast( (.*)|$)", fullsudo=True)
 async def gcast(event):
