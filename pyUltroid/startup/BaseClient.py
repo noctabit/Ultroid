@@ -11,7 +11,6 @@ import sys
 import time
 from logging import Logger
 
-from telethonpatch import TelegramClient
 from telethon import utils as telethon_utils
 from telethon.errors import (
     AccessTokenExpiredError,
@@ -21,10 +20,10 @@ from telethon.errors import (
 )
 
 from ..configs import Var
-from . import *
+from .reconnection_handler import CustomTelegramClient
 
 
-class UltroidClient(TelegramClient):
+class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTelegramClient
     def __init__(
         self,
         session,
@@ -46,7 +45,7 @@ class UltroidClient(TelegramClient):
         self.udB = udB
         kwargs["api_id"] = api_id or Var.API_ID
         kwargs["api_hash"] = api_hash or Var.API_HASH
-        kwargs["base_logger"] = TelethonLogger
+        kwargs["logger"] = self.logger  # Pasar logger a CustomTelegramClient
         super().__init__(session, **kwargs)
         self.run_in_loop(self.start_client(bot_token=bot_token))
         self.dc_id = self.session.dc_id
