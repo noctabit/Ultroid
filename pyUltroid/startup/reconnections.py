@@ -5,7 +5,7 @@ from telethon import TelegramClient
 class CustomTelegramClient(TelegramClient):
     def __init__(self, *args, logger=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.logger = logger or logging.getLogger("Reconnection")
+        self.logger = logger or logging.getLogger("Reconnections")
         self.retries = [
             (10, 10),  # 10 intentos cada 10 segundos
             (10, 60),  # 10 intentos cada 1 minuto
