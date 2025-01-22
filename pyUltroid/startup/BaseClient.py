@@ -20,7 +20,7 @@ from telethon.errors import (
 )
 
 from ..configs import Var
-from .reconnection_handler import CustomTelegramClient
+from .reconnections import CustomTelegramClient
 
 
 class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTelegramClient
