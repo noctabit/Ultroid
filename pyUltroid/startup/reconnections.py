@@ -4,6 +4,7 @@ from telethon import TelegramClient
 
 class CustomTelegramClient(TelegramClient):
     def __init__(self, *args, logger=None, **kwargs):
+        kwargs["auto_reconnect"] = False  # Desactivar reconexión automática
         super().__init__(*args, **kwargs)
         self.logger = logger or logging.getLogger("Reconnections")
         self.retries = [
