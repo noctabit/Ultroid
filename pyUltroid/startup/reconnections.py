@@ -15,8 +15,24 @@ class CustomTelegramClient(TelegramClient):
             (10, 3600),  # 10 intentos cada hora
         ]
 
+    async def connect(self):
+        """Sobreescribe la conexión para utilizar lógica personalizada."""
+        self.logger.info("Intentando conectar a Telegram con lógica personalizada...")
+        try:
+            await super().connect()
+            if self.is_connected():
+                self.logger.info("Conexión exitosa a Telegram.")
+        except Exception as e:
+            self.logger.error(f"Fallo en la conexión inicial: {e}")
+            await self.on_disconnect()
+
+    async def disconnect(self):
+        """Sobreescribe la desconexión para manejar la reconexión manualmente."""
+        self.logger.warning("Desconectado de Telegram. Llamando a reconexión personalizada.")
+        await self.on_disconnect()
+
     async def on_disconnect(self):
-        """Sobreescribe la lógica de reconexión."""
+        """Manejo de la reconexión con estrategia personalizada."""
         self.logger.warning("Se ha detectado una desconexión. Iniciando reconexión progresiva.")
         for attempt_group, delay in self.retries:
             for attempt in range(attempt_group):
@@ -37,3 +53,4 @@ class CustomTelegramClient(TelegramClient):
                     self.logger.warning(f"Fallo en el intento de reconexión: {e}")
                 await asyncio.sleep(delay)
         self.logger.error("Todos los intentos de reconexión fallaron. Requiere intervención manual.")
+
