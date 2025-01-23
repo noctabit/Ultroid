@@ -9,7 +9,8 @@ import contextlib
 import inspect
 import sys
 import time
-from logging import Logger
+import logging
+
 
 from telethon import utils as telethon_utils
 from telethon.errors import (
@@ -22,6 +23,8 @@ from telethon.errors import (
 from ..configs import Var
 from .reconnections import CustomTelegramClient
 
+
+logger = logging.getLogger(__name__)  # Crear la instancia de logger
 
 class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTelegramClient
     def __init__(
