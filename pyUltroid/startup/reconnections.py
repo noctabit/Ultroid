@@ -24,12 +24,8 @@ def validate_session(session, logger, _exit=True):
 
     if session:
         # Telethon Session
-        if session.startswith("1"):  # Verifica si la sesión es Telethon
-            if len(session.strip()) != 353:
-                logger.exception(get_string("py_c1"))
-                if _exit:
-                    sys.exit()
-            return StringSession(session)
+        if isinstance(session, StringSession) and len(session.session) == 353:
+            return session
 
         # Pyrogram Session
         elif len(session) in [351, 356, 362]:  # Verifica si la sesión es Pyrogram
@@ -66,7 +62,6 @@ def validate_session(session, logger, _exit=True):
     logger.exception(get_string("py_c2"))
     if _exit:
         sys.exit()
-
 
 class CustomTelegramClient(TelegramClient):
     def __init__(self, session, *args, logger=None, **kwargs):
@@ -117,6 +112,7 @@ class CustomTelegramClient(TelegramClient):
                 except Exception as e:
                     self.logger.error(f"Error durante el intento de reconexión: {e}")
         self.logger.critical("Todos los intentos de reconexión fallaron. Requiere intervención manual.")
+
 
 
 
