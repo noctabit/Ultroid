@@ -22,7 +22,9 @@ class CustomTelegramClient(TelegramClient):
         try:
             await super().connect()
             if self.is_connected():
-                self.logger.info("Conexión exitosa a Telegram.")
+                self.logger.info("Conexión exitosa a Telegram. Estado: True")
+            else:
+                self.logger.warning("Conexión no establecida correctamente. Estado: False")
         except Exception as e:
             self.logger.error(f"Fallo en la conexión inicial: {e}")
             await self.on_disconnect()
@@ -41,17 +43,18 @@ class CustomTelegramClient(TelegramClient):
                     if not self.is_connected():
                         self.logger.info(
                             f"Intento de reconexión {attempt + 1}/{attempt_group} "
-                            f"(intervalo: {delay}s)"
+                            f"(intervalo: {delay}s). Estado actual: False"
                         )
+                        await asyncio.sleep(delay)
                         await self.connect()
                         if self.is_connected():
-                            self.logger.info("¡Reconexión exitosa!")
+                            self.logger.info("¡Reconexión exitosa! Estado: True")
                             return
                     else:
-                        self.logger.info("El cliente ya está conectado.")
+                        self.logger.info("El cliente ya está conectado. Estado: True")
                         return
                 except Exception as e:
-                    self.logger.warning(f"Fallo en el intento de reconexión: {e}")
-                await asyncio.sleep(delay)
-        self.logger.error("Todos los intentos de reconexión fallaron. Requiere intervención manual.")
+                    self.logger.error(f"Error durante el intento de reconexión: {e}")
+        self.logger.critical("Todos los intentos de reconexión fallaron. Requiere intervención manual.")
+
 
