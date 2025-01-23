@@ -2,7 +2,7 @@ import logging
 import asyncio
 from telethon import TelegramClient
 from telethon.errors.rpcerrorlist import AuthKeyDuplicatedError
-from connections import validate_session, DC_IPV4  # Importamos lo necesario de connections.py
+from .connections import validate_session, DC_IPV4  # Importamos lo necesario de connections.py
 
 class CustomTelegramClient(TelegramClient):
     def __init__(self, session, *args, logger=None, **kwargs):
