@@ -1,11 +1,14 @@
 import logging
 import asyncio
 from telethon import TelegramClient
+from telethon.errors.rpcerrorlist import AuthKeyDuplicatedError
+from connections import validate_session, DC_IPV4  # Importamos lo necesario de connections.py
 
 class CustomTelegramClient(TelegramClient):
-    def __init__(self, *args, logger=None, **kwargs):
+    def __init__(self, session, *args, logger=None, **kwargs):
         kwargs["auto_reconnect"] = False  # Desactivar reconexión automática
-        super().__init__(*args, **kwargs)
+        # Usamos validate_session para manejar la validación de la sesión
+        super().__init__(validate_session(session, logger), *args, **kwargs)
         self.logger = logger or logging.getLogger("Reconnections")
         self.retries = [
             (10, 10),  # 10 intentos cada 10 segundos
@@ -29,11 +32,6 @@ class CustomTelegramClient(TelegramClient):
             self.logger.error(f"Fallo en la conexión inicial: {e}")
             await self.on_disconnect()
 
-    async def disconnect(self):
-        """Sobreescribe la desconexión para manejar la reconexión manualmente."""
-        self.logger.warning("Desconectado de Telegram. Llamando a reconexión personalizada.")
-        await self.on_disconnect()
-
     async def on_disconnect(self):
         """Manejo de la reconexión con estrategia personalizada."""
         self.logger.warning("Se ha detectado una desconexión. Iniciando reconexión progresiva.")
@@ -56,5 +54,6 @@ class CustomTelegramClient(TelegramClient):
                 except Exception as e:
                     self.logger.error(f"Error durante el intento de reconexión: {e}")
         self.logger.critical("Todos los intentos de reconexión fallaron. Requiere intervención manual.")
+
 
 
