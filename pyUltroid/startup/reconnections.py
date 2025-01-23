@@ -6,6 +6,7 @@ from telethon.sessions import StringSession
 import struct
 import base64
 import ipaddress
+import sys
 
 # Configuraciones para Data Centers
 DC_IPV4 = {
@@ -17,38 +18,54 @@ DC_IPV4 = {
 }
 _STRUCT_PREFORMAT = ">BI?256sQ?"
 
-def validate_session(session, logger):
-    """Valida y convierte sesiones en un formato estándar."""
-    if session.startswith("1"):  # Sesión Telethon
-        if len(session) != 353:
-            logger.error("Sesión Telethon inválida. Longitud incorrecta.")
-            raise ValueError("Sesión Telethon inválida.")
-        return StringSession(session)
+def validate_session(session, logger, _exit=True):
+    """Valida y convierte sesiones en un formato estándar (como en Código 2)."""
+    from strings import get_string
 
-    elif len(session) in {351, 356, 362}:  # Sesión Pyrogram
-        try:
-            data = struct.unpack(
-                _STRUCT_PREFORMAT,
-                base64.urlsafe_b64decode(session + "=" * (-len(session) % 4)),
-            )
-            dc_id, auth_key = data[0], data[-1]
-            return StringSession(
-                "1" + base64.urlsafe_b64encode(
-                    struct.pack(
-                        _STRUCT_PREFORMAT,
-                        dc_id,
-                        ipaddress.ip_address(DC_IPV4[dc_id]).packed,
-                        443,
-                        auth_key,
-                    )
-                ).decode("ascii")
-            )
-        except Exception as e:
-            logger.error(f"Error al validar sesión Pyrogram: {e}")
-            raise ValueError("Sesión Pyrogram inválida.")
-    else:
-        logger.error("Formato de sesión no reconocido.")
-        raise ValueError("Formato de sesión no reconocido.")
+    if session:
+        # Telethon Session
+        if session.startswith("1"):  # Verifica si la sesión es Telethon
+            if len(session.strip()) != 353:
+                logger.exception(get_string("py_c1"))
+                if _exit:
+                    sys.exit()
+            return StringSession(session)
+
+        # Pyrogram Session
+        elif len(session) in [351, 356, 362]:  # Verifica si la sesión es Pyrogram
+            try:
+                data_ = struct.unpack(
+                    _STRUCT_PREFORMAT,
+                    base64.urlsafe_b64decode(session + "=" * (-len(session) % 4)),
+                )
+                if len(session) in [351, 356]:
+                    auth_id = 2
+                else:
+                    auth_id = 3
+                dc_id, auth_key = data_[0], data_[auth_id]
+                return StringSession(
+                    "1"
+                    + base64.urlsafe_b64encode(
+                        struct.pack(
+                            _STRUCT_PREFORMAT.format(4),
+                            dc_id,
+                            ipaddress.ip_address(DC_IPV4[dc_id]).packed,
+                            443,
+                            auth_key,
+                        )
+                    ).decode("ascii")
+                )
+            except Exception as e:
+                logger.exception(get_string("py_c1"))
+                if _exit:
+                    sys.exit()
+        else:
+            logger.exception(get_string("py_c1"))
+            if _exit:
+                sys.exit()
+    logger.exception(get_string("py_c2"))
+    if _exit:
+        sys.exit()
 
 
 class CustomTelegramClient(TelegramClient):
