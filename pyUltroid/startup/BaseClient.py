@@ -34,7 +34,7 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         api_hash=None,
         bot_token=None,
         udB=None,
-        logger: Logger = logger,
+        logger: logging.Logger = logger,  # Usar logging.Logger en la anotación
         log_attempt=True,
         exit_on_error=True,
         *args,
