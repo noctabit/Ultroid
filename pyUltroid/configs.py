@@ -54,3 +54,5 @@ class Var:
     DATABASE_URL = config("DATABASE_URL", default=None)
     # for MONGODB users
     MONGO_URI = config("MONGO_URI", default=None)
+    # for SQLite users
+    SQLITE_PATH = config("SQLITE_PATH", default=None)

@@ -16,7 +16,7 @@ if run_as_module:
     from ..configs import Var
 
 
-Redis = MongoClient = psycopg2 = Database = None
+Redis = MongoClient = psycopg2 = sqlite3 = Database = None
 if Var.REDIS_URI or Var.REDISHOST:
     try:
         from redis import Redis
@@ -38,6 +38,17 @@ elif Var.DATABASE_URL:
         LOGS.info("Installing 'pyscopg2' for database.")
         os.system(f"{sys.executable} -m pip install -q psycopg2-binary")
         import psycopg2
+elif getattr(Var, 'SQLITE_PATH', None):
+    try:
+        import sqlite3
+    except ImportError:
+        LOGS.info("SQLite is not available. Using local file database.")
+        try:
+            from localdb import Database
+        except ImportError:
+            LOGS.info("Installing localdb for fallback.")
+            os.system(f"{sys.executable} -m pip install -q localdb.json")
+            from localdb import Database
 else:
     try:
         from localdb import Database
@@ -301,6 +312,93 @@ class RedisDB(_BaseDatabase):
 # --------------------------------------------------------------------------------------------- #
 
 
+class SQLiteDB(_BaseDatabase):
+    def __init__(self, path="ultroid.db"):
+        import os
+        self.path = path
+        self._connection = sqlite3.connect(path, check_same_thread=False)
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS ultroid_data (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        self._connection.commit()
+        super().__init__()
+
+    def __repr__(self):
+        return f"<Ultroid.SQLiteDB\n -path: {self.path}\n -total_keys: {len(self.keys())}\n>"
+
+    @property
+    def name(self):
+        return "SQLite"
+
+    @property
+    def usage(self):
+        import os
+        try:
+            return os.path.getsize(self.path)
+        except OSError:
+            return 0
+
+    def ping(self):
+        try:
+            self._connection.execute("SELECT 1")
+            return True
+        except sqlite3.Error:
+            return False
+
+    def keys(self):
+        cursor = self._connection.execute("SELECT key FROM ultroid_data")
+        return [row[0] for row in cursor.fetchall()]
+
+    def set(self, key, value):
+        try:
+            self._connection.execute(
+                "INSERT OR REPLACE INTO ultroid_data (key, value) VALUES (?, ?)",
+                (str(key), str(value))
+            )
+            self._connection.commit()
+            return True
+        except sqlite3.Error as e:
+            LOGS.error(f"SQLite set error: {e}")
+            return False
+
+    def get(self, key):
+        try:
+            cursor = self._connection.execute(
+                "SELECT value FROM ultroid_data WHERE key = ?", (str(key),)
+            )
+            result = cursor.fetchone()
+            return result[0] if result else None
+        except sqlite3.Error as e:
+            LOGS.error(f"SQLite get error: {e}")
+            return None
+
+    def delete(self, key):
+        try:
+            self._connection.execute(
+                "DELETE FROM ultroid_data WHERE key = ?", (str(key),)
+            )
+            self._connection.commit()
+            return True
+        except sqlite3.Error as e:
+            LOGS.error(f"SQLite delete error: {e}")
+            return False
+
+    def flushall(self):
+        try:
+            self._connection.execute("DELETE FROM ultroid_data")
+            self._connection.commit()
+            self._cache.clear()
+            return True
+        except sqlite3.Error as e:
+            LOGS.error(f"SQLite flushall error: {e}")
+            return False
+
+    def close(self):
+        """Cerrar la conexión a la base de datos"""
+        if self._connection:
+            self._connection.close()
+
+
 class LocalDB(_BaseDatabase):
     def __init__(self):
         self.db = Database("ultroid")
@@ -339,14 +437,19 @@ def UltroidDB():
             return MongoDB(Var.MONGO_URI)
         elif psycopg2:
             return SqlDB(Var.DATABASE_URL)
+        elif sqlite3:
+            sqlite_path = getattr(Var, 'SQLITE_PATH', 'ultroid.db')
+            LOGS.info(f"Using SQLite database: {sqlite_path}")
+            return SQLiteDB(sqlite_path)
         else:
             LOGS.critical(
-                "No DB requirement fullfilled!\nPlease install redis, mongo or sql dependencies...\nTill then using local file as database."
+                "No DB requirement fullfilled!\nPlease install redis, mongo, sql dependencies or configure SQLite...\nTill then using local file as database."
             )
             return LocalDB()
     except BaseException as err:
         LOGS.exception(err)
-    exit()
+        LOGS.info("Fallback to LocalDB due to database connection error.")
+        return LocalDB()
 
 
 # --------------------------------------------------------------------------------------------- #
