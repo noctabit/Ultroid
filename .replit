@@ -4,4 +4,4 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["ffmpeg", "mediainfo", "neofetch", "git"]
+packages = ["ffmpeg", "freetype", "git", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "mediainfo", "neofetch", "openjpeg", "openssl", "tcl", "tk", "xcodebuild", "zlib"]
