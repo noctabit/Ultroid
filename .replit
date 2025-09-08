@@ -28,3 +28,7 @@ args = "python3 -m pyUltroid"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[deployment]
+deploymentTarget = "vm"
+run = ["python3", "-m", "pyUltroid"]
