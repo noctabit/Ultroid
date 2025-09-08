@@ -32,3 +32,4 @@ tgcrypto
 youtube-search-python
 yt-dlp
 psycopg2-binary
+safety
