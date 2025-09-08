@@ -52,6 +52,9 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         super().__init__(session, **kwargs)
         self.run_in_loop(self.start_client(bot_token=bot_token))
         self.dc_id = self.session.dc_id
+        # Inicializar heartbeat para mantener la conexión activa
+        self._heartbeat_task = None
+        self._start_heartbeat()
 
     def __repr__(self):
         return f"<Ultroid.Client :\n self: {self.full_name}\n bot: {self._bot}\n>"
@@ -62,38 +65,48 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             return self.me.to_dict()
 
     async def start_client(self, **kwargs):
-        """function to start client"""
+        """function to start client with improved error handling"""
         if self._log_at:
             self.logger.info("Trying to login.")
         try:
             await self.start(**kwargs)
         except ApiIdInvalidError:
-            self.logger.critical("API ID and API_HASH combination does not match!")
-
+            self.logger.critical("❌ API ID and API_HASH combination does not match!")
             sys.exit()
         except (AuthKeyDuplicatedError, EOFError) as er:
             if self._handle_error:
-                self.logger.critical("String session expired. Create new!")
+                self.logger.critical("❌ String session expired. Create new!")
                 return sys.exit()
-            self.logger.critical("String session expired.")
+            self.logger.critical("⚠️ String session expired.")
         except (AccessTokenExpiredError, AccessTokenInvalidError):
             # AccessTokenError can only occur for Bot account
             # And at Early Process, Its saved in DB.
-            self.udB.del_key("BOT_TOKEN")
+            if self.udB:
+                self.udB.del_key("BOT_TOKEN")
             self.logger.critical(
-                "Bot token is expired or invalid. Create new from @Botfather and add in BOT_TOKEN env variable!"
+                "❌ Bot token is expired or invalid. Create new from @Botfather and add in BOT_TOKEN env variable!"
             )
             sys.exit()
+        except Exception as e:
+            self.logger.error(f"❌ Unexpected error during start_client: {e}")
+            if self._handle_error:
+                raise e
+        
         # Save some stuff for later use...
-        self.me = await self.get_me()
-        if self.me.bot:
-            me = f"@{self.me.username}"
-        else:
-            setattr(self.me, "phone", None)
-            me = self.full_name
-        if self._log_at:
-            self.logger.info(f"Logged in as {me}")
-        self._bot = await self.is_bot()
+        try:
+            self.me = await self.get_me()
+            if self.me.bot:
+                me = f"@{self.me.username}"
+            else:
+                setattr(self.me, "phone", None)
+                me = self.full_name
+            if self._log_at:
+                self.logger.info(f"✅ Logged in as {me}")
+            self._bot = await self.is_bot()
+        except Exception as e:
+            self.logger.error(f"❌ Error getting user info: {e}")
+            if self._handle_error:
+                raise e
 
     async def fast_uploader(self, file, **kwargs):
         """Upload files in a faster way"""
@@ -241,6 +254,40 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
     def uid(self):
         """Client's user id"""
         return self.me.id
+
+    def _start_heartbeat(self):
+        """Iniciar el heartbeat para mantener la conexión activa"""
+        import asyncio
+        if self._heartbeat_task is None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def _heartbeat_loop(self):
+        """Loop de heartbeat para verificar y mantener la conexión"""
+        import asyncio
+        while True:
+            try:
+                await asyncio.sleep(30)  # Verificar cada 30 segundos
+                if not self.is_connected():
+                    self.logger.warning("💓 Heartbeat: Conexión perdida, activando reconexión")
+                    if hasattr(self, '_handle_reconnection'):
+                        asyncio.create_task(self._handle_reconnection())
+                else:
+                    # Ping simple para mantener la conexión activa
+                    try:
+                        await self.get_me()
+                    except Exception as e:
+                        self.logger.warning(f"💓 Heartbeat ping failed: {e}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"💓 Heartbeat error: {e}")
+                await asyncio.sleep(10)
+
+    def stop_heartbeat(self):
+        """Detener el heartbeat"""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            self._heartbeat_task = None
 
     def to_dict(self):
         return dict(inspect.getmembers(self))
