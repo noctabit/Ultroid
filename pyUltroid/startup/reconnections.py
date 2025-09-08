@@ -2,15 +2,14 @@ import logging
 import asyncio
 from telethon import TelegramClient, events
 from telethon.errors import (
-    ConnectionError,
     FloodWaitError,
     AuthKeyUnregisteredError,
     AuthKeyInvalidError,
     AuthKeyDuplicatedError,
     SessionPasswordNeededError,
     UnauthorizedError,
-    TimedOutError,
 )
+import socket
 
 class CustomTelegramClient(TelegramClient):
     def __init__(self, *args, logger=None, **kwargs):
@@ -56,7 +55,7 @@ class CustomTelegramClient(TelegramClient):
                 else:
                     self.logger.warning("⚠️ Conexión no establecida correctamente")
                     
-            except (ConnectionError, TimedOutError, OSError) as e:
+            except (OSError, socket.error, socket.timeout) as e:
                 self.logger.warning(f"🔄 Error de conexión (intento {attempt + 1}): {e}")
                 if attempt < retries:
                     await asyncio.sleep(2 ** attempt)  # Backoff exponencial
