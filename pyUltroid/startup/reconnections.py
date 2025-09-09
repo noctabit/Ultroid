@@ -403,6 +403,37 @@ class CustomTelegramClient(TelegramClient):
         self._last_connection_error = None
         self._force_cleanup_on_reconnect = False
         self.logger.debug("📊 Contadores de conexión reseteados")
+    
+    async def _handle_connection_aborted(self):
+        """Manejo específico para error 103 (ConnectionAbortedError) desde BaseClient"""
+        self.logger.warning("💥 Manejo de error 103 activado desde BaseClient")
+        
+        # Marcar que hubo error de conexión abortada
+        self._connection_abort_count += 1
+        self._last_connection_error = "ConnectionAbortedError (103)"
+        
+        # Marcar que estamos reconectando para prevenir loops
+        if self._reconnecting:
+            self.logger.warning("🔄 Reconexión ya en progreso - ignorando error 103 adicional")
+            return
+        
+        self._reconnecting = True
+        
+        # Esperar un momento para que Telethon complete su cleanup fallido
+        await asyncio.sleep(1.0)
+        
+        self.logger.warning("🚨 Iniciando reconexión inmediata tras error 103")
+        
+        # Activar el sistema de reconexión con configuración agresiva para error 103
+        success = await self._handle_reconnection(attempts=5, delay=2.0)
+        
+        if success:
+            self.logger.info("✅ Reconexión exitosa tras error 103!")
+        else:
+            self.logger.error("❌ Reconexión falló tras error 103 - el bot puede estar desconectado")
+            # No lanzar excepción aquí - dejar que el sistema de BaseClient maneje
+        
+        return success
 
     def disconnect(self):
         """Desconexión controlada compatible con sync/async"""

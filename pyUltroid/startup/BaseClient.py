@@ -238,8 +238,26 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         try:
             self.run_until_disconnected()
         except ConnectionAbortedError as e:
-            self.logger.info(f"🔌 Conexión terminada limpiamente: {e}")
-            # Terminar sin error - esto es normal
+            self.logger.info(f"🔌 Conexión terminada por error 103: {e}")
+            # NO terminar - activar reconexión personalizada
+            if hasattr(self, '_handle_connection_aborted'):
+                self.logger.info("🔄 Activando sistema de reconexión personalizado tras error 103...")
+                # Ejecutar reconexión en el loop principal
+                import asyncio
+                try:
+                    loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
+                    if loop and not loop.is_closed():
+                        loop.run_until_complete(self._handle_connection_aborted())
+                        # Después de reconectar, seguir ejecutando
+                        self.logger.info("🔄 Reiniciando bot tras reconexión exitosa...")
+                        self.run()  # Recursivo para continuar funcionando
+                    else:
+                        self.logger.error("❌ Loop cerrado - no se puede reconectar")
+                except Exception as reconnect_error:
+                    self.logger.error(f"❌ Error crítico durante reconexión: {reconnect_error}")
+                    raise
+            else:
+                self.logger.warning("⚠️ Sistema de reconexión no disponible - terminando")
         except KeyboardInterrupt:
             self.logger.info("🛑 Bot detenido por el usuario")
         except Exception as e:
