@@ -225,41 +225,109 @@ class CustomTelegramClient(TelegramClient):
                         f"(grupo {retry_group_idx + 1}, total: {self._current_retries})"
                     )
                     
-                    # PASO 1: SIEMPRE desconectar completamente primero 
-                    # Especialmente importante después de error 103
-                    if self._connection_abort_count > 0:
-                        self.logger.info(f"🧹 Error 103 previo detectado - limpieza forzada (count: {self._connection_abort_count})")
-                        await self._force_connection_cleanup()
-                        self._force_cleanup_on_reconnect = False
-                    else:
-                        # Desconexión normal
+                    # PASO 1: Forzar desconexión completa si hay conexión zombie (error 103)
+                    if self._connection_abort_count > 0 or 'abort' in str(self._last_connection_error or '').lower():
+                        self.logger.info(f"💀 Conexión zombie detectada tras error 103 - forzando desconexión completa")
+                        
+                        # Método 1: Intentar desconexión forzada del sender
                         try:
-                            if super().is_connected():  # Usar is_connected de Telethon base
-                                self.logger.debug("🔌 Desconectando antes de reconectar...")
-                                await self.disconnect_async()
-                                await asyncio.sleep(0.5)
+                            if hasattr(self, '_sender') and self._sender:
+                                self.logger.debug("🔧 Forzando desconexión del sender...")
+                                await self._sender.disconnect()
                         except Exception as e:
-                            self.logger.debug(f"⚠️ Error durante desconexión previa: {e}")
-                    
-                    # PASO 2: Esperar según el tipo de error
-                    if self._last_connection_error and ('abort' in str(self._last_connection_error).lower() or '103' in str(self._last_connection_error)):
-                        wait_time = min(delay + 2, 8)  # Espera extra para errores 103
-                        self.logger.info(f"⏳ Esperando {wait_time}s (error 103 previo)")
+                            self.logger.debug(f"⚠️ Error desconectando sender: {e}")
+                        
+                        # Método 2: Desconexión a nivel de cliente
+                        try:
+                            self.logger.debug("🔧 Forzando desconexión del cliente...")
+                            await super().disconnect()
+                        except Exception as e:
+                            self.logger.debug(f"⚠️ Error desconectando cliente: {e}")
+                            
+                        # Método 3: Resetear flags internos manualmente
+                        try:
+                            self._connected = False
+                            if hasattr(self, '_authorized'):
+                                self._authorized = False
+                        except Exception:
+                            pass
+                            
+                        self.logger.info("💀 Desconexión zombie completada")
+                        await asyncio.sleep(2.0)  # Esperar más para que tome efecto
+                        
                     else:
-                        wait_time = min(delay, 5)
-                        self.logger.debug(f"⏳ Esperando {wait_time}s")
+                        # Desconexión normal para otros casos
+                        try:
+                            if super().is_connected():
+                                self.logger.debug("🔌 Desconexión normal antes de reconectar...")
+                                await self.disconnect_async()
+                                await asyncio.sleep(1.0)
+                        except Exception as e:
+                            self.logger.debug(f"⚠️ Error durante desconexión normal: {e}")
+                    
+                    # PASO 2: Verificar que realmente está desconectado
+                    max_disconnect_checks = 3
+                    for check in range(max_disconnect_checks):
+                        if not super().is_connected():
+                            self.logger.debug("✅ Confirmada desconexión completa")
+                            break
+                        else:
+                            self.logger.warning(f"⚠️ Aún reporta conexión - intento {check + 1}/{max_disconnect_checks}")
+                            await asyncio.sleep(1.0)
+                    
+                    # PASO 3: Espera antes de reconectar
+                    if self._connection_abort_count > 0:
+                        wait_time = 3 + self._connection_abort_count  # Espera extra para errores 103
+                        self.logger.info(f"⏳ Esperando {wait_time}s tras error 103...")
+                    else:
+                        wait_time = min(delay, 3)
+                        self.logger.debug(f"⏳ Esperando {wait_time}s...")
                     
                     await asyncio.sleep(wait_time)
                     
-                    # PASO 3: Intentar reconectar
-                    self.logger.info("🔗 Intentando reconectar...")
-                    if await self.connect(retries=1):  # Solo 1 retry en reconexión para ser más directo
-                        self.logger.info("✅ Reconexión exitosa!")
-                        self._reset_connection_counters()
-                        self._reconnecting = False
-                        return True
-                    else:
-                        self.logger.warning(f"❌ Intento de reconexión {attempt + 1} falló")
+                    # PASO 4: Reconexión directa y simple
+                    self.logger.info("🔗 Iniciando reconexión...")
+                    
+                    try:
+                        # Configurar antes de conectar
+                        self._auto_reconnect = False
+                        
+                        # Reconexión directa usando Telethon base
+                        await super().connect()
+                        
+                        # Inmediatamente después de conectar, deshabilitar sistemas nativos
+                        self._disable_native_systems()
+                        self._apply_sender_overrides()
+                        
+                        # Verificar que funciona
+                        if self.is_connected():
+                            try:
+                                # Test rápido
+                                await asyncio.wait_for(self.get_me(), timeout=3.0)
+                                self.logger.info("✅ Reconexión exitosa y verificada!")
+                                self._reset_connection_counters()
+                                self._reconnecting = False
+                                return True
+                            except Exception as e:
+                                self.logger.warning(f"❌ Test de reconexión falló: {e}")
+                                # Desconectar si el test falla
+                                try:
+                                    await super().disconnect()
+                                except:
+                                    pass
+                        else:
+                            self.logger.warning("❌ Reconexión no establecida")
+                            
+                    except (ConnectionAbortedError, ConnectionResetError, ConnectionError) as e:
+                        self.logger.warning(f"💥 Error 103 durante reconexión: {e}")
+                        self._connection_abort_count += 1
+                        # Marcar para limpieza más agresiva en siguiente intento
+                        self._force_cleanup_on_reconnect = True
+                        
+                    except Exception as e:
+                        self.logger.warning(f"❌ Error durante reconexión: {e}")
+                    
+                    self.logger.warning(f"❌ Intento de reconexión {attempt + 1} falló")
                         
                 except FloodWaitError as e:
                     self.logger.warning(f"⏳ Flood wait durante reconexión: {e.seconds}s")
