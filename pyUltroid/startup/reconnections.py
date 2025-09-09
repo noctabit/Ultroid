@@ -90,18 +90,19 @@ class CustomTelegramClient(TelegramClient):
                 # Manejo específico para errores de conexión abortada (Errno 103)
                 self._last_connection_error = e
                 self._connection_abort_count += 1
-                self.logger.warning(f"💥 Error de conexión abortada (intento {attempt + 1}): {e} [Count: {self._connection_abort_count}]")
+                self.logger.warning(f"💥 Error 103/abort detectado (intento {attempt + 1}): {e} [Count: {self._connection_abort_count}]")
                 
-                # Limpiar agresivamente el estado de conexión
+                # Para error 103, SIEMPRE forzar limpieza completa
+                self.logger.info("🧹 Error 103: Forzando limpieza completa antes del siguiente intento")
                 await self._force_connection_cleanup()
                 
                 if attempt < retries:
-                    # Backoff más agresivo para errores de abort
-                    delay = min(2 ** attempt + self._connection_abort_count, 15)
-                    self.logger.debug(f"⏳ Esperando {delay}s antes del siguiente intento")
+                    # Backoff específico para errores 103
+                    delay = min(3 + self._connection_abort_count, 10)
+                    self.logger.info(f"⏳ Error 103: Esperando {delay}s antes del siguiente intento")
                     await asyncio.sleep(delay)
                 else:
-                    self.logger.error(f"❌ Falló la conexión después de {retries + 1} intentos (conexión abortada)")
+                    self.logger.error(f"❌ Falló la conexión después de {retries + 1} intentos (Error 103)")
                     self._force_cleanup_on_reconnect = True
                     if not self._reconnecting:
                         asyncio.create_task(self._handle_reconnection())
@@ -175,16 +176,23 @@ class CustomTelegramClient(TelegramClient):
             if self._plugin_loading:  # Si sigue cargando después de 10s
                 return
         
-        # Verificar una vez más antes de iniciar reconexión
+        # Verificar si realmente necesitamos reconectar
+        # Pero si hay force_cleanup_on_reconnect, forzar reconexión incluso si parece conectado
         if self.is_connected() and not self._force_cleanup_on_reconnect:
             try:
-                # Verificación más robusta con timeout
-                await asyncio.wait_for(self.get_me(), timeout=5.0)
+                # Verificación más robusta con timeout corto
+                await asyncio.wait_for(self.get_me(), timeout=3.0)
                 self.logger.debug("✅ Conexión verificada como activa, cancelando reconexión")
                 self._reset_connection_counters()
                 return True
             except asyncio.TimeoutError:
-                self.logger.warning("⏰ Timeout en verificación de conexión, procediendo con reconexión")
+                self.logger.warning("⏰ Timeout en verificación - conexión zombie detectada")
+                # Conexión zombie - proceder con reconexión
+                self._force_cleanup_on_reconnect = True
+            except (ConnectionAbortedError, ConnectionResetError, ConnectionError) as e:
+                self.logger.warning(f"💥 Error 103/conexión durante verificación: {e}")
+                self._connection_abort_count += 1
+                self._force_cleanup_on_reconnect = True
             except Exception as e:
                 self.logger.debug(f"🔍 Verificación de conexión falló: {e}, procediendo con reconexión")
             
@@ -213,36 +221,45 @@ class CustomTelegramClient(TelegramClient):
                         return False
                     
                     self.logger.info(
-                        f"🔄 Intento de reconexión {attempt + 1}/{attempts} "
+                        f"🔄 Reconexión {attempt + 1}/{attempts} "
                         f"(grupo {retry_group_idx + 1}, total: {self._current_retries})"
                     )
                     
-                    # Limpieza agresiva antes de reconectar
-                    if self._force_cleanup_on_reconnect or self._connection_abort_count > 2:
+                    # PASO 1: SIEMPRE desconectar completamente primero 
+                    # Especialmente importante después de error 103
+                    if self._connection_abort_count > 0:
+                        self.logger.info(f"🧹 Error 103 previo detectado - limpieza forzada (count: {self._connection_abort_count})")
                         await self._force_connection_cleanup()
                         self._force_cleanup_on_reconnect = False
                     else:
-                        # Desconectar normalmente si está parcialmente conectado
-                        if hasattr(self, '_sender') and self._sender:
-                            try:
+                        # Desconexión normal
+                        try:
+                            if super().is_connected():  # Usar is_connected de Telethon base
+                                self.logger.debug("🔌 Desconectando antes de reconectar...")
                                 await self.disconnect_async()
-                            except Exception as e:
-                                self.logger.debug(f"💥 Error durante desconexión normal: {e}")
+                                await asyncio.sleep(0.5)
+                        except Exception as e:
+                            self.logger.debug(f"⚠️ Error durante desconexión previa: {e}")
                     
-                    # Espera adaptativa basada en el tipo de error
-                    initial_delay = min(delay, 5)
-                    if self._last_connection_error and 'abort' in str(self._last_connection_error).lower():
-                        initial_delay = min(delay + 2, 10)  # Espera extra para errores de abort
-                        
-                    await asyncio.sleep(initial_delay)
+                    # PASO 2: Esperar según el tipo de error
+                    if self._last_connection_error and ('abort' in str(self._last_connection_error).lower() or '103' in str(self._last_connection_error)):
+                        wait_time = min(delay + 2, 8)  # Espera extra para errores 103
+                        self.logger.info(f"⏳ Esperando {wait_time}s (error 103 previo)")
+                    else:
+                        wait_time = min(delay, 5)
+                        self.logger.debug(f"⏳ Esperando {wait_time}s")
                     
-                    # Intentar reconectar con reintentos adaptativos
-                    connect_retries = 2 if self._connection_abort_count < 3 else 1
-                    if await self.connect(retries=connect_retries):
+                    await asyncio.sleep(wait_time)
+                    
+                    # PASO 3: Intentar reconectar
+                    self.logger.info("🔗 Intentando reconectar...")
+                    if await self.connect(retries=1):  # Solo 1 retry en reconexión para ser más directo
                         self.logger.info("✅ Reconexión exitosa!")
                         self._reset_connection_counters()
                         self._reconnecting = False
                         return True
+                    else:
+                        self.logger.warning(f"❌ Intento de reconexión {attempt + 1} falló")
                         
                 except FloodWaitError as e:
                     self.logger.warning(f"⏳ Flood wait durante reconexión: {e.seconds}s")
@@ -273,73 +290,43 @@ class CustomTelegramClient(TelegramClient):
         return False
     
     async def _force_connection_cleanup(self):
-        """Limpieza agresiva del estado de conexión para errores de abort"""
+        """Limpieza agresiva específica para errores 103 y conexiones zombie"""
         try:
-            self.logger.debug("🧹 Iniciando limpieza agresiva de conexión")
+            self.logger.info("🧹 Iniciando limpieza agresiva para error 103/conexión zombie")
             
-            # 1. Cancelar todas las tareas de conexión activas
-            if hasattr(self, '_sender') and self._sender:
-                try:
-                    # Forzar desconexión del sender
-                    if hasattr(self._sender, '_connection'):
-                        conn = self._sender._connection
-                        if conn and hasattr(conn, 'disconnect'):
-                            try:
-                                await conn.disconnect()
-                            except Exception:
-                                pass
-                                
-                    # Limpiar el sender completamente
-                    if hasattr(self._sender, 'disconnect'):
-                        try:
-                            await self._sender.disconnect()
-                        except Exception:
-                            pass
-                            
-                    # Resetear flags internos del sender
-                    if hasattr(self._sender, '_connected'):
-                        self._sender._connected = False
-                    if hasattr(self._sender, '_disconnected'):
-                        self._sender._disconnected = True
-                        
-                except Exception as e:
-                    self.logger.debug(f"🧹 Error limpiando sender: {e}")
+            # 1. Forzar desconexión usando el método nativo de Telethon
+            try:
+                if hasattr(self, '_sender') and self._sender:
+                    # Intentar desconexión normal del sender primero
+                    await self._sender.disconnect()
+                    await asyncio.sleep(0.2)
+            except Exception as e:
+                self.logger.debug(f"🧹 Error en desconexión normal del sender: {e}")
             
-            # 2. Limpiar conexiones a nivel de socket
-            if hasattr(self, '_connection') and self._connection:
-                try:
-                    if hasattr(self._connection, 'disconnect'):
-                        await self._connection.disconnect()
-                    self._connection = None
-                except Exception as e:
-                    self.logger.debug(f"🧹 Error limpiando connection: {e}")
-                    
-            # 3. Resetear flags de estado interno
-            self._connected = False
-            if hasattr(self, '_authorized'):
-                self._authorized = False
+            # 2. Usar disconnect nativo de Telethon
+            try:
+                await super().disconnect()
+                await asyncio.sleep(0.3)
+            except Exception as e:
+                self.logger.debug(f"🧹 Error en desconexión super(): {e}")
                 
-            # 4. Cancelar tareas de keepalive si existen
-            for attr_name in ['_keepalive_task', '_ping_task', '_heartbeat_task']:
-                if hasattr(self, attr_name):
-                    task = getattr(self, attr_name)
-                    if task and not task.done():
-                        task.cancel()
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            pass
-                        except Exception as e:
-                            self.logger.debug(f"🧹 Error cancelando {attr_name}: {e}")
-                        setattr(self, attr_name, None)
+            # 3. Resetear flags de estado interno básicos
+            try:
+                self._connected = False
+                if hasattr(self, '_authorized'):
+                    self._authorized = False
+            except Exception as e:
+                self.logger.debug(f"🧹 Error reseteando flags: {e}")
+                
+            # 4. Esperar para que la limpieza tome efecto
+            await asyncio.sleep(1.0)  # Esperar más tiempo para errores 103
             
-            # 5. Esperar un momento para que las limpiezas tomen efecto
-            await asyncio.sleep(0.5)
-            
-            self.logger.debug("✅ Limpieza agresiva de conexión completada")
+            self.logger.info("✅ Limpieza agresiva completada - listo para reconectar")
             
         except Exception as e:
             self.logger.warning(f"⚠️ Error durante limpieza agresiva: {e}")
+            # Esperar de todos modos
+            await asyncio.sleep(0.5)
     
     def _reset_connection_counters(self):
         """Resetear contadores de error cuando la conexión es exitosa"""
@@ -477,33 +464,18 @@ class CustomTelegramClient(TelegramClient):
             self.loop.call_soon(self._apply_sender_overrides)
     
     def _apply_sender_overrides(self):
-        """Aplicar sobrescrituras al sender cuando esté disponible"""
+        """Aplicar sobrescrituras mínimas al sender - SOLO desactivar reconexión"""
         try:
             if hasattr(self, '_sender') and self._sender:
-                # Sobrescribir métodos de reconexión en el sender
-                if hasattr(self._sender, '_reconnect'):
-                    self._sender._reconnect = lambda *args, **kwargs: None
+                # SOLO deshabilitar auto_reconnect - NO tocar otros métodos
                 if hasattr(self._sender, 'auto_reconnect'):
                     self._sender.auto_reconnect = False
+                if hasattr(self._sender, '_auto_reconnect'):
+                    self._sender._auto_reconnect = False
                     
-                # Sobrescribir métodos adicionales que pueden causar reconexiones
-                dummy_methods = {
-                    '_handle_rpc_error': lambda *args, **kwargs: None,
-                    '_handle_update': lambda *args, **kwargs: None,
-                    'reconnect': lambda *args, **kwargs: False,
-                    '_reconnect': lambda *args, **kwargs: False,
-                }
-                
-                for method_name, dummy_func in dummy_methods.items():
-                    if hasattr(self._sender, method_name):
-                        original = getattr(self._sender, method_name)
-                        if callable(original):
-                            setattr(self._sender, method_name, dummy_func)
-                            self.logger.debug(f"🚫 Sobrescrito método {method_name} en sender")
-                    
-                self.logger.debug("🚫 Métodos de sender sobrescritos exitosamente")
+                self.logger.debug("🚫 Reconexión de sender deshabilitada (sin tocar handlers)")
         except Exception as e:
-            self.logger.debug(f"⚠️ Error sobrescribiendo métodos de sender: {e}")
+            self.logger.debug(f"⚠️ Error deshabilitando reconexión de sender: {e}")
 
     def is_connected(self):
         """Verificación mejorada y más robusta del estado de conexión"""
@@ -595,9 +567,11 @@ class CustomTelegramClient(TelegramClient):
             if self.is_connected():
                 try:
                     # Verificar que la conexión funciona después de cargar plugins
-                    asyncio.create_task(self._verify_post_plugin_connection())
+                    loop = asyncio.get_event_loop()
+                    if loop and not loop.is_closed():
+                        loop.create_task(self._verify_post_plugin_connection())
                 except Exception as e:
-                    self.logger.debug(f"⚠️ No se pudo verificar conexión post-plugins: {e}")
+                    self.logger.debug(f"⚠️ No se pudo programar verificación post-plugins: {e}")
                     
     async def _verify_post_plugin_connection(self):
         """Verificar que la conexión sigue funcionando después de cargar plugins"""
