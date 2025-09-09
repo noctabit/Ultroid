@@ -270,9 +270,9 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         """Iniciar heartbeat después de que el cliente esté completamente conectado"""
         import asyncio
         # Programar el heartbeat para la próxima iteración del event loop
-        # Esperar un poco más para asegurar que la conexión está estable
+        # Espera más corta para comenzar la supervisión antes
         if hasattr(self, 'loop') and self.loop:
-            self.loop.call_later(3, self._init_heartbeat_task)
+            self.loop.call_later(2, self._init_heartbeat_task)
     
     def prepare_for_plugin_loading(self):
         """Preparar cliente para carga de plugins sin interferencias"""
@@ -295,14 +295,18 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             self.logger.warning(f"💓 Error al iniciar heartbeat: {e}")
 
     async def _heartbeat_loop(self):
-        """Loop de heartbeat mejorado para mantener conexión activa"""
+        """Loop de heartbeat mejorado y optimizado para conexiones locales intermitentes"""
         import asyncio
-        heartbeat_interval = 30  # 30 segundos
-        consecutive_failures = 0
-        max_failures = 2  # Permitir 2 fallos antes de reconectar
         
-        # Espera inicial para permitir que la conexión se estabilice
-        await asyncio.sleep(10)
+        # Configuración optimizada para conexiones locales
+        heartbeat_interval = 25  # 25 segundos - más frecuente para detectar problemas antes
+        consecutive_failures = 0
+        max_failures = 1  # Más agresivo: 1 fallo para reconectar (mejor para conexiones locales)
+        connection_abort_failures = 0
+        ping_timeout = 4.0  # Timeout más corto para detección rápida
+        
+        # Espera inicial más corta
+        await asyncio.sleep(8)
         
         while True:
             try:
@@ -313,39 +317,102 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
                     self.logger.debug("💓 Heartbeat pausado durante carga de plugins")
                     continue
                 
-                # Verificación mejorada de conexión
+                # Verificar si hay reconexión en progreso
+                if getattr(self, '_reconnecting', False):
+                    self.logger.debug("💓 Heartbeat pausado durante reconexión")
+                    consecutive_failures = 0  # Reset contadores durante reconexión
+                    connection_abort_failures = 0
+                    continue
+                
+                # Verificación mejorada de conexión usando el nuevo método ping_connection
                 if not self.is_connected():
                     consecutive_failures += 1
                     self.logger.debug(f"💓 Heartbeat: Conexión perdida (fallo {consecutive_failures}/{max_failures})")
                     
                     if consecutive_failures >= max_failures:
-                        self.logger.warning("💓 Heartbeat: Conexión perdida, activando reconexión")
-                        # Activar nuestro sistema de reconexión personalizado
+                        self.logger.warning("💓 Heartbeat: Conexión perdida detectada, activando reconexión")
                         if hasattr(self, '_handle_reconnection') and not getattr(self, '_reconnecting', False):
                             asyncio.create_task(self._handle_reconnection())
                         break
                 else:
-                    # Ping ligero para mantener la conexión activa
+                    # Usar ping_connection optimizado con timeout
                     try:
-                        await self.get_me()
-                        consecutive_failures = 0  # Reset contador al tener éxito
-                        self.logger.debug("💓 Heartbeat: Conexión activa")
-                    except Exception as e:
+                        if hasattr(self, 'ping_connection'):
+                            # Usar el método optimizado si está disponible
+                            ping_success = await self.ping_connection(timeout=ping_timeout)
+                        else:
+                            # Fallback al método tradicional con timeout
+                            await asyncio.wait_for(self.get_me(), timeout=ping_timeout)
+                            ping_success = True
+                        
+                        if ping_success:
+                            # Reset contadores en caso de éxito
+                            consecutive_failures = 0
+                            connection_abort_failures = 0
+                            self.logger.debug("💓 Heartbeat: Conexión verificada exitosamente")
+                            
+                            # Resetear contadores del sistema de reconexión si está funcionando bien
+                            if hasattr(self, '_reset_connection_counters'):
+                                # Solo resetear si llevamos tiempo sin problemas
+                                if consecutive_failures == 0 and connection_abort_failures == 0:
+                                    abort_count = getattr(self, '_connection_abort_count', 0)
+                                    if abort_count > 0 and abort_count < 10:  # Resetear solo si no es demasiado alto
+                                        self._reset_connection_counters()
+                                        self.logger.debug("💓 Heartbeat: Contadores de reconexión reseteados")
+                        else:
+                            consecutive_failures += 1
+                            self.logger.debug(f"💓 Heartbeat: Ping falló (fallo {consecutive_failures}/{max_failures})")
+                            
+                    except asyncio.TimeoutError:
                         consecutive_failures += 1
-                        self.logger.debug(f"💓 Heartbeat ping falló (fallo {consecutive_failures}/{max_failures}): {e}")
+                        self.logger.warning(f"💓 Heartbeat: Timeout de ping después de {ping_timeout}s (fallo {consecutive_failures}/{max_failures})")
                         
                         if consecutive_failures >= max_failures:
-                            self.logger.warning("💓 Heartbeat: Múltiples fallos de ping, activando reconexión")
+                            self.logger.warning("💓 Heartbeat: Múltiples timeouts detectados, activando reconexión")
+                            if hasattr(self, '_handle_reconnection') and not getattr(self, '_reconnecting', False):
+                                asyncio.create_task(self._handle_reconnection())
+                            break
+                            
+                    except (ConnectionAbortedError, ConnectionResetError, ConnectionError) as e:
+                        connection_abort_failures += 1
+                        consecutive_failures += 1
+                        self.logger.warning(f"💥 Heartbeat: Error de conexión abortada detectado: {e} (abort #{connection_abort_failures})")
+                        
+                        # Para errores de abort, ser más agresivo
+                        if connection_abort_failures >= 1 or consecutive_failures >= max_failures:
+                            self.logger.warning("💓 Heartbeat: Error de conexión abortada, activando reconexión inmediata")
+                            # Marcar para limpieza forzada si hay muchos errores de abort
+                            if hasattr(self, '_force_cleanup_on_reconnect') and connection_abort_failures >= 2:
+                                self._force_cleanup_on_reconnect = True
+                                
+                            if hasattr(self, '_handle_reconnection') and not getattr(self, '_reconnecting', False):
+                                asyncio.create_task(self._handle_reconnection())
+                            break
+                            
+                    except Exception as e:
+                        consecutive_failures += 1
+                        error_msg = str(e).lower()
+                        
+                        # Detectar errores relacionados con abort/reset en el mensaje
+                        if 'abort' in error_msg or 'reset' in error_msg or 'software caused connection' in error_msg:
+                            connection_abort_failures += 1
+                            self.logger.warning(f"💥 Heartbeat: Error relacionado con abort detectado: {e} (abort #{connection_abort_failures})")
+                        else:
+                            self.logger.debug(f"💓 Heartbeat: Error de ping genérico (fallo {consecutive_failures}/{max_failures}): {e}")
+                        
+                        if consecutive_failures >= max_failures:
+                            self.logger.warning("💓 Heartbeat: Múltiples errores detectados, activando reconexión")
                             if hasattr(self, '_handle_reconnection') and not getattr(self, '_reconnecting', False):
                                 asyncio.create_task(self._handle_reconnection())
                             break
                         
             except asyncio.CancelledError:
-                self.logger.info("💓 Heartbeat cancelado")
+                self.logger.info("💓 Heartbeat cancelado correctamente")
                 break
             except Exception as e:
-                self.logger.error(f"💓 Error en heartbeat: {e}")
-                await asyncio.sleep(10)  # Esperar antes de reintentar
+                self.logger.error(f"💓 Error crítico en heartbeat: {e}")
+                # En caso de error crítico, esperar más tiempo antes de continuar
+                await asyncio.sleep(15)
 
     def stop_heartbeat(self):
         """Detener el sistema de heartbeat"""
