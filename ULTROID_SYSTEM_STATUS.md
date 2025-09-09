@@ -39,19 +39,22 @@ class UltroidClient(SimpleReconnectionClient):  # Sistema simple
 ```
 
 ### **2. Sistema de Reconexión Simplificado**
-**Archivo:** `pyUltroid/startup/reconnections_simple.py` (NUEVO)
+**Archivo:** `pyUltroid/startup/reconnections_simple.py` (ACTIVO)
 
 **Características:**
-- ✅ **Reconexión básica**: `simple_reconnect()` sin complejidades
-- ✅ **Reconexión agresiva**: Para casos difíciles con `_aggressive_reconnect()`
-- ✅ **Monitoreo opcional**: `start_simple_monitoring()` cada 30 segundos
+- ✅ **Reconexión básica**: `simple_reconnect()` con 3 intentos y backoff exponencial
+- ✅ **Reconexión agresiva**: `_aggressive_reconnect()` para casos difíciles después de 5 fallos
+- ✅ **Manejo automático**: `auto_reconnect_on_error()` decide qué tipo de reconexión usar
 - ✅ **Sin interceptores**: No hay interceptores de MTProtoSender complejos
 - ✅ **Sin aniquilación**: No sobrescribe métodos nativos de Telethon
+- ✅ **Limpio y simple**: Eliminado sistema complejo de 5 fases
 
 **Flujo Simplificado:**
 ```
-Error conexión → Detectado → simple_reconnect() → 
-→ Si falla múltiples veces → _aggressive_reconnect() → Reconectado
+Error conexión → auto_reconnect_on_error() →
+→ < 5 fallos: simple_reconnect(3 intentos) →
+→ ≥ 5 fallos: _aggressive_reconnect(3 intentos, 10s espera) →
+→ Reconectado
 ```
 
 ### **3. Eliminación de Complejidades**
@@ -323,12 +326,12 @@ except ConnectionAbortedError as e:
     success = await self.gradual_reconnect()
 ```
 
-**📊 FLUJO DE RECONEXIÓN ACTUAL (SIN MONITOREO):**
+**📊 FLUJO DE RECONEXIÓN ACTUAL (SIMPLIFICADO):**
 ```
-Error 103 → Capturado en BaseClient.run() → 
-→ gradual_reconnect() → 
-→ 5 fases progresivas (Básica → Final) → 
-→ Cada fase con más intentos y espera → Reconectado
+Error conexión → Capturado en BaseClient.run() → 
+→ simple_reconnect() → 
+→ 3 intentos con backoff exponencial → 
+→ Si falla: _aggressive_reconnect() → Reconectado
 ```
 
 **✅ SISTEMA CORREGIDO:**
