@@ -218,38 +218,85 @@ class UltroidClient(TelegramClient):
         return self.loop.run_until_complete(function)
 
     def run(self):
-        """run asyncio loop"""
-        try:
-            self.run_until_disconnected()
-        except ConnectionAbortedError as e:
-            self.logger.error(f"Error 103 detectado: {e}")
-            # Solo reconexión básica para error 103
+        """run asyncio loop with 24h progressive reconnection"""
+        while True:
             try:
+                self.run_until_disconnected()
+                break  # Salida normal
+            except (ConnectionAbortedError, ConnectionError, OSError) as e:
+                self.logger.error(f"Error de conexión detectado: {e}")
+                # Iniciar reconexión progresiva de 24h
                 import asyncio
-                success = self.loop.run_until_complete(self._simple_reconnect())
+                success = self.loop.run_until_complete(self._progressive_24h_reconnect())
                 if success:
-                    self.logger.info("Reconexión exitosa")
-                    self.run_until_disconnected()
+                    self.logger.info("Reconexión exitosa, continuando...")
+                    continue  # Volver al bucle principal
                 else:
-                    raise
-            except Exception:
-                raise
-        except KeyboardInterrupt:
-            self.logger.info("Bot detenido por el usuario")
+                    self.logger.error("Reconexión 24h agotada, cerrando...")
+                    break
+            except KeyboardInterrupt:
+                self.logger.info("Bot detenido por el usuario")
+                break
 
-    async def _simple_reconnect(self):
-        """Reconexión simple para error 103"""
-        for attempt in range(3):
+    async def _progressive_24h_reconnect(self):
+        """Sistema de reconexión progresiva de 24 horas con 25 franjas"""
+        import asyncio
+        from datetime import datetime, timedelta
+        
+        # 25 franjas que suman 24h (86400 segundos)
+        intervals = [
+            10, 20, 30, 60, 90, 120, 180, 240, 300, 450,     # primeros 10: ~25 min
+            600, 900, 1200, 1800, 2400, 3600, 3600, 3600,    # siguientes 8: ~6h
+            5400, 7200, 7200, 10800, 10800, 14400, 21600     # últimos 7: ~18h
+        ]
+        
+        start_time = datetime.now()
+        self.logger.info(f"🔄 Iniciando reconexión progresiva 24h desde {start_time.strftime('%H:%M:%S')}")
+        self.logger.info(f"📅 Última tentativa será a las {(start_time + timedelta(seconds=sum(intervals))).strftime('%H:%M:%S del día siguiente')}")
+        
+        for franja, wait_seconds in enumerate(intervals, 1):
             try:
-                if self.is_connected():
-                    await self.disconnect()
-                await asyncio.sleep(2 ** attempt)  # 1s, 2s, 4s
+                # Calcular tiempo restante y próxima tentativa
+                next_attempt_time = datetime.now() + timedelta(seconds=wait_seconds)
+                total_elapsed = (datetime.now() - start_time).total_seconds()
+                remaining_time = sum(intervals) - total_elapsed
+                
+                self.logger.info(f"⏳ Franja {franja}/25 - Esperando {wait_seconds//60}m {wait_seconds%60}s")
+                self.logger.info(f"🕒 Próxima tentativa: {next_attempt_time.strftime('%H:%M:%S')}")
+                self.logger.info(f"⌛ Tiempo restante del ciclo: {remaining_time//3600:.1f}h")
+                
+                await asyncio.sleep(wait_seconds)
+                
+                # Intentar reconexión
+                self.logger.info(f"🔄 Franja {franja}: Intentando reconexión...")
+                
+                # Limpiar conexión existente
+                try:
+                    if self.is_connected():
+                        await self.disconnect()
+                except:
+                    pass
+                
+                # Intentar conectar
                 await super().connect()
+                
                 if self.is_connected():
-                    await self.get_me()
-                    return True
+                    try:
+                        await asyncio.wait_for(self.get_me(), timeout=10.0)
+                        elapsed_total = (datetime.now() - start_time).total_seconds()
+                        self.logger.info(f"✅ Reconexión exitosa en franja {franja} después de {elapsed_total//3600:.1f}h {(elapsed_total%3600)//60:.0f}m")
+                        return True
+                    except:
+                        pass
+                
+                self.logger.warning(f"❌ Franja {franja} falló, continuando...")
+                
             except Exception as e:
-                self.logger.warning(f"Reconexión intento {attempt + 1}: {e}")
+                self.logger.warning(f"⚠️ Error en franja {franja}: {e}")
+        
+        # Todas las franjas agotadas
+        total_elapsed = (datetime.now() - start_time).total_seconds()
+        self.logger.error(f"💀 Reconexión 24h agotada después de {total_elapsed//3600:.1f}h - 25 franjas completadas")
         return False
 
     def add_handler(self, func, *args, **kwargs):
