@@ -26,24 +26,45 @@ class SimpleReconnectionClient(TelegramClient):
     async def call_native_reconnect(self):
         """Mi código invoca métodos nativos de Telethon sin transferir control"""
         try:
-            self.logger.info("🔧 Invocando métodos nativos de Telethon...")
+            print("\n🔧 [DEBUG] ===== INICIANDO PROCESO DE RECONEXIÓN =====")
+            print(f"🔧 [DEBUG] Estado inicial: connected={self.is_connected()}")
+            print(f"🔧 [DEBUG] Loop running: {hasattr(self, 'loop') and self.loop.is_running()}")
+            
+            # Verificar estado previo
+            if self.is_connected():
+                print("🔧 [DEBUG] ⚠️ Cliente ya conectado, desconectando primero...")
+                await self.disconnect()
+                print(f"🔧 [DEBUG] Post-disconnect: connected={self.is_connected()}")
+            
+            print("🔧 [DEBUG] 🌐 Ejecutando super().connect()...")
             
             # Llamar al método interno de conexión de Telethon
-            # Esto usa toda la lógica nativa (servidores, protocolos, etc.)
             await super().connect()
             
+            print(f"🔧 [DEBUG] 📡 Post-connect: connected={self.is_connected()}")
+            
             if self.is_connected():
-                # Verificar que la conexión funciona
-                await self.get_me()
-                self.logger.info("✅ Reconexión nativa exitosa")
-                return True
+                print("🔧 [DEBUG] 🧪 Probando funcionalidad con get_me()...")
+                try:
+                    me = await self.get_me()
+                    print(f"🔧 [DEBUG] ✅ get_me() exitoso: {me.first_name if me else 'None'}")
+                    self.logger.info("✅ Reconexión nativa exitosa")
+                    return True
+                except Exception as test_e:
+                    print(f"🔧 [DEBUG] ❌ get_me() falló: {test_e}")
+                    return False
             else:
+                print("🔧 [DEBUG] ❌ is_connected() devuelve False")
                 self.logger.warning("❌ Método nativo falló")
                 return False
                 
         except Exception as e:
+            print(f"🔧 [DEBUG] 💥 Excepción capturada: {type(e).__name__}: {e}")
+            print(f"🔧 [DEBUG] Estado post-error: connected={self.is_connected()}")
             self.logger.error(f"💥 Error invocando método nativo: {e}")
             return False
+        finally:
+            print("🔧 [DEBUG] ===== FIN PROCESO DE RECONEXIÓN =====\n")
 
     def run(self):
         """run con bucle que invoca métodos nativos cada 10s"""
@@ -60,16 +81,21 @@ class SimpleReconnectionClient(TelegramClient):
                 max_attempts = 50
                 
                 while not reconnected and attempt <= max_attempts:
+                    print(f"\n⏳ [MAIN] Intento {attempt}/{max_attempts} - Esperando 10 segundos...")
                     self.logger.info(f"⏳ Intento {attempt}/{max_attempts} - Esperando 10 segundos...")
                     time.sleep(10)
+                    
+                    print(f"⚡ [MAIN] Ejecutando intento {attempt}/{max_attempts}...")
                     
                     # INVOCAR método nativo (sin transferir control)
                     reconnected = self.loop.run_until_complete(self.call_native_reconnect())
                     
                     if reconnected:
+                        print(f"🎉 [MAIN] ¡ÉXITO! Reconectado en intento {attempt}/{max_attempts}")
                         self.logger.info(f"🎉 Reconectado en intento {attempt}/{max_attempts}")
                         break  # Salir del bucle de reconexión
                     else:
+                        print(f"❌ [MAIN] Intento {attempt}/{max_attempts} FALLÓ")
                         self.logger.warning(f"❌ Intento {attempt}/{max_attempts} falló")
                         attempt += 1
                 
