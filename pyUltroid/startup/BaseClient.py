@@ -234,8 +234,17 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         return self.loop.run_until_complete(function)
 
     def run(self):
-        """run asyncio loop"""
-        self.run_until_disconnected()
+        """run asyncio loop con manejo mejorado de errores"""
+        try:
+            self.run_until_disconnected()
+        except ConnectionAbortedError as e:
+            self.logger.info(f"🔌 Conexión terminada limpiamente: {e}")
+            # Terminar sin error - esto es normal
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Bot detenido por el usuario")
+        except Exception as e:
+            self.logger.error(f"❌ Error crítico en run: {e}")
+            raise
 
     def add_handler(self, func, *args, **kwargs):
         """Add new event handler, ignoring if exists"""
