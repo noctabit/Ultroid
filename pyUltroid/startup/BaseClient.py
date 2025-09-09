@@ -70,11 +70,20 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             return {}
 
     async def start_client(self, **kwargs):
-        """function to start client with improved error handling"""
+        """function to start client"""
         if self._log_at:
             self.logger.info("Trying to login.")
         try:
             await self.start(**kwargs)
+            # Solo después de conectar exitosamente, configurar el sistema de reconexión
+            if self.is_connected():
+                self.logger.info("✅ Conexión inicial exitosa")
+                # Deshabilitar sistemas nativos SOLO después de conexión exitosa
+                if hasattr(self, '_disable_native_systems'):
+                    self._disable_native_systems()
+                # Aplicar interceptores SOLO después de conexión exitosa
+                if hasattr(self, '_apply_sender_overrides'):
+                    self._apply_sender_overrides()
         except ApiIdInvalidError:
             self.logger.critical("❌ API ID and API_HASH combination does not match!")
             sys.exit()
@@ -84,8 +93,6 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
                 return sys.exit()
             self.logger.critical("⚠️ String session expired.")
         except (AccessTokenExpiredError, AccessTokenInvalidError):
-            # AccessTokenError can only occur for Bot account
-            # And at Early Process, Its saved in DB.
             if self.udB:
                 self.udB.del_key("BOT_TOKEN")
             self.logger.critical(
@@ -93,7 +100,7 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             )
             sys.exit()
         except Exception as e:
-            self.logger.error(f"❌ Unexpected error during start_client: {e}")
+            self.logger.error(f"❌ Error durante start_client: {e}")
             if self._handle_error:
                 raise e
         
