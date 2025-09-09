@@ -247,10 +247,20 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
                 try:
                     loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
                     if loop and not loop.is_closed():
-                        loop.run_until_complete(self._handle_connection_aborted())
-                        # Después de reconectar, seguir ejecutando
-                        self.logger.info("🔄 Reiniciando bot tras reconexión exitosa...")
-                        self.run()  # Recursivo para continuar funcionando
+                        success = loop.run_until_complete(self._handle_connection_aborted())
+                        if success:
+                            # Después de reconectar exitosamente, seguir ejecutando
+                            self.logger.info("🔄 Reiniciando bot tras reconexión exitosa...")
+                            self.run()  # Recursivo para continuar funcionando
+                        else:
+                            # Si la reconexión falló, intentar una vez más
+                            self.logger.warning("⚠️ Reconexión falló - último intento...")
+                            final_attempt = loop.run_until_complete(self._handle_connection_aborted())
+                            if final_attempt:
+                                self.logger.info("🔄 Último intento exitoso - reiniciando bot...")
+                                self.run()
+                            else:
+                                self.logger.error("❌ Reconexión completamente fallida - terminando")
                     else:
                         self.logger.error("❌ Loop cerrado - no se puede reconectar")
                 except Exception as reconnect_error:

@@ -405,35 +405,235 @@ class CustomTelegramClient(TelegramClient):
         self.logger.debug("📊 Contadores de conexión reseteados")
     
     async def _handle_connection_aborted(self):
-        """Manejo específico para error 103 (ConnectionAbortedError) desde BaseClient"""
-        self.logger.warning("💥 Manejo de error 103 activado desde BaseClient")
+        """MI SISTEMA toma CONTROL TOTAL tras error 103"""
+        self.logger.warning("⚡ MI SISTEMA TOMA CONTROL TOTAL tras error 103")
         
         # Marcar que hubo error de conexión abortada
         self._connection_abort_count += 1
         self._last_connection_error = "ConnectionAbortedError (103)"
         
-        # Marcar que estamos reconectando para prevenir loops
+        # CONTROL TOTAL: No permitir interferencias
         if self._reconnecting:
-            self.logger.warning("🔄 Reconexión ya en progreso - ignorando error 103 adicional")
-            return
+            self.logger.warning("🔄 Reconexión ya en progreso - FORZANDO CONTROL")
+            self._reconnecting = False  # RESETEAR para tomar control
         
         self._reconnecting = True
         
-        # Esperar un momento para que Telethon complete su cleanup fallido
-        await asyncio.sleep(1.0)
+        # CONTROL INMEDIATO: Sin esperas para que Telethon haga algo
+        self.logger.warning("⚡ CONTROL INMEDIATO - Sin esperar a Telethon")
         
-        self.logger.warning("🚨 Iniciando reconexión inmediata tras error 103")
-        
-        # Activar el sistema de reconexión con configuración agresiva para error 103
-        success = await self._handle_reconnection(attempts=5, delay=2.0)
+        # RECONEXIÓN AGRESIVA INMEDIATA
+        success = await self._aggressive_reconnection_takeover()
         
         if success:
-            self.logger.info("✅ Reconexión exitosa tras error 103!")
+            self.logger.info("✅ MI SISTEMA reconectó exitosamente!")
         else:
-            self.logger.error("❌ Reconexión falló tras error 103 - el bot puede estar desconectado")
-            # No lanzar excepción aquí - dejar que el sistema de BaseClient maneje
+            self.logger.error("❌ Mi sistema falló - reintentando con más agresividad")
+            # SEGUNDO INTENTO más agresivo
+            success = await self._aggressive_reconnection_takeover(force=True)
         
         return success
+    
+    async def _aggressive_reconnection_takeover(self, force=False):
+        """MI SISTEMA de reconexión ULTRA AGRESIVO - optimizado para ERROR 103"""
+        
+        # DETECTAR si es específicamente error 103
+        is_error_103 = ('103' in str(self._last_connection_error or '') or 
+                       self._connection_abort_count > 0)
+        
+        if is_error_103:
+            self.logger.error("🚀 RECONEXIÓN AGRESIVA ESPECÍFICA para ERROR 103")
+        else:
+            self.logger.warning("🚀 RECONEXIÓN AGRESIVA GENÉRICA")
+        
+        # PASO 1: ANIQUILAR todo lo que quede de Telethon INMEDIATAMENTE
+        await self._total_telethon_annihilation()
+        
+        # PASO 2: ESPERA ESPECÍFICA para error 103
+        if is_error_103:
+            if force:
+                await asyncio.sleep(0.4)  # ERROR 103 forzado: espera mínima
+            else:
+                await asyncio.sleep(1.2)  # ERROR 103: espera moderada
+        else:
+            # Otros errores
+            await asyncio.sleep(0.8)
+        
+        # PASO 3: INTENTOS ESPECÍFICOS para error 103
+        max_attempts = 7 if is_error_103 else 5  # Más intentos para error 103
+        
+        for attempt in range(1, max_attempts + 1):
+            if is_error_103:
+                self.logger.error(f"🚨 INTENTO ESPECÍFICO 103: {attempt}/{max_attempts}")
+            else:
+                self.logger.warning(f"⚡ INTENTO AGRESIVO: {attempt}/{max_attempts}")
+            
+            try:
+                # PASO A: RECONEXIÓN DIRECTA
+                await super().connect()
+                
+                # PASO B: VERIFICAR que conectó REALMENTE
+                if not super().is_connected():
+                    raise Exception("Conexión no establecida después de super().connect()")
+                
+                # PASO C: INMEDIATAMENTE tomar control TOTAL
+                self._setup_complete_override()  # ANIQUILAR sistemas nativos
+                self._disable_native_systems()   # DESHABILITAR todo
+                
+                # PASO D: VERIFICAR que mi interceptor está activo
+                if hasattr(self, '_sender') and self._sender:
+                    if not hasattr(self._sender, 'send') or self._sender.send.__name__ != '_error_103_interceptor':
+                        if is_error_103:
+                            self.logger.warning("🔧 Reactivando interceptor 103 tras reconexión")
+                        self._reactivate_error_103_interceptor()
+                
+                # PASO E: TEST FUNCIONAL optimizado para error 103
+                try:
+                    # Timeout específico para error 103
+                    timeout = 1.8 if is_error_103 else 2.5
+                    test_result = await asyncio.wait_for(self.get_me(), timeout=timeout)
+                    
+                    if test_result:
+                        if is_error_103:
+                            self.logger.error("🚨 ERROR 103 SUPERADO EXITOSAMENTE!")
+                        else:
+                            self.logger.info("⚡ RECONEXIÓN AGRESIVA EXITOSA!")
+                        
+                        self._reset_connection_counters()
+                        self._reconnecting = False
+                        return True
+                    else:
+                        raise Exception("get_me() retornó None")
+                        
+                except asyncio.TimeoutError:
+                    if is_error_103:
+                        self.logger.error("❌ Test 103 timeout - reintentando")
+                    else:
+                        self.logger.warning("❌ Test timeout - reintentando")
+                except Exception as test_error:
+                    if is_error_103:
+                        self.logger.error(f"❌ Test 103 falló: {test_error}")
+                    else:
+                        self.logger.warning(f"❌ Test falló: {test_error}")
+                        
+            except Exception as e:
+                if is_error_103:
+                    self.logger.error(f"❌ Intento 103 #{attempt} falló: {e}")
+                else:
+                    self.logger.warning(f"❌ Intento #{attempt} falló: {e}")
+                
+            # Espera específica entre intentos para error 103
+            if attempt < max_attempts:
+                delay = 0.3 if is_error_103 else 0.5
+                await asyncio.sleep(delay)
+        
+        if is_error_103:
+            self.logger.error("❌ TODOS los intentos específicos para ERROR 103 FALLARON")
+        else:
+            self.logger.error("❌ TODOS los intentos agresivos fallaron")
+        
+        self._reconnecting = False
+        return False
+    
+    async def _total_telethon_annihilation(self):
+        """ANIQUILAR COMPLETAMENTE todo rastro de Telethon activo"""
+        self.logger.warning("💀 ANIQUILACIÓN TOTAL DE TELETHON EN PROGRESO")
+        
+        try:
+            # FORZAR desconexión completa sin piedad
+            if hasattr(self, '_sender') and self._sender:
+                try:
+                    await self._sender.disconnect()
+                except:
+                    pass
+            
+            try:
+                await super().disconnect()
+            except:
+                pass
+                
+            # RESETEAR flags internos por la fuerza
+            self._connected = False
+            if hasattr(self, '_authorized'):
+                self._authorized = False
+                
+            # ANIQUILAR tasks de keepalive si existen
+            if hasattr(self, '_keepalive_task') and self._keepalive_task:
+                self._keepalive_task.cancel()
+                self._keepalive_task = None
+                
+        except Exception as e:
+            self.logger.debug(f"⚠️ Error en aniquilación: {e}")
+        
+        self.logger.warning("💀 ANIQUILACIÓN COMPLETA TERMINADA")
+    
+    async def _emergency_103_recovery(self):
+        """SISTEMA DE EMERGENCIA ESPECÍFICO para error 103 - MÁXIMA PRIORIDAD"""
+        import asyncio
+        
+        self.logger.error("🚨 SISTEMA DE EMERGENCIA 103 ACTIVADO")
+        
+        # PREVENIR múltiples activaciones
+        if hasattr(self, '_emergency_103_active') and self._emergency_103_active:
+            self.logger.warning("⚠️ Emergencia 103 ya activa - ignorando")
+            return
+        
+        self._emergency_103_active = True
+        
+        try:
+            # PASO 1: ANIQUILACIÓN INMEDIATA Y COMPLETA
+            self.logger.error("🚨 PASO 1: Aniquilación de emergencia para 103")
+            await self._total_telethon_annihilation()
+            
+            # PASO 2: ESPERA MÍNIMA para estabilización
+            await asyncio.sleep(0.8)
+            
+            # PASO 3: RECONEXIÓN DE EMERGENCIA ULTRA RÁPIDA
+            self.logger.error("🚨 PASO 3: Reconexión de emergencia 103")
+            
+            for emergency_attempt in range(1, 4):  # Solo 3 intentos rápidos
+                self.logger.error(f"🚨 INTENTO EMERGENCIA 103: {emergency_attempt}/3")
+                
+                try:
+                    # RECONEXIÓN DIRECTA sin verificaciones previas
+                    await super().connect()
+                    
+                    # CONTROL INMEDIATO
+                    self._setup_complete_override()
+                    self._disable_native_systems()
+                    
+                    # TEST ULTRA RÁPIDO
+                    if self.is_connected():
+                        try:
+                            await asyncio.wait_for(self.get_me(), timeout=1.5)
+                            self.logger.error("🚨 EMERGENCIA 103 RESUELTA EXITOSAMENTE!")
+                            
+                            # RESETEAR todo
+                            self._reset_connection_counters()
+                            self._reconnecting = False
+                            self._emergency_103_active = False
+                            return True
+                            
+                        except asyncio.TimeoutError:
+                            self.logger.error("❌ Test emergencia timeout")
+                        except Exception as test_e:
+                            self.logger.error(f"❌ Test emergencia falló: {test_e}")
+                    
+                except Exception as conn_e:
+                    self.logger.error(f"❌ Intento emergencia {emergency_attempt} falló: {conn_e}")
+                
+                # Espera MUY corta entre intentos
+                if emergency_attempt < 3:
+                    await asyncio.sleep(0.3)
+            
+            self.logger.error("❌ TODOS los intentos de emergencia 103 FALLARON")
+            
+        except Exception as emergency_error:
+            self.logger.error(f"❌ ERROR CRÍTICO en emergencia 103: {emergency_error}")
+        finally:
+            self._emergency_103_active = False
+            
+        return False
 
     def disconnect(self):
         """Desconexión controlada compatible con sync/async"""
@@ -485,22 +685,45 @@ class CustomTelegramClient(TelegramClient):
             self.logger.warning(f"⚠️ Error durante desconexión async explícito: {e}")
     
     def _setup_complete_override(self):
-        """Configurar sobrescritura completa de métodos internos de Telethon"""
-        # Sobrescribir métodos que causan reconexiones automáticas
-        self._original_keepalive_loop = getattr(self, '_keepalive_loop', None)
-        self._keepalive_loop = self._dummy_keepalive_loop
+        """ANIQUILAR COMPLETAMENTE todos los sistemas nativos de Telethon"""
         
-        # Deshabilitar auto reconexión a nivel interno
-        self._auto_reconnect = False
+        # ANIQUILAR keepalive completamente
+        def _kill_keepalive(*args, **kwargs):
+            self.logger.debug("💀 Keepalive nativo ANIQUILADO completamente")
+            return None
         
-        # Sobrescribir métodos críticos de reconexiones
+        async def _kill_keepalive_async(*args, **kwargs):
+            self.logger.debug("💀 Keepalive async nativo ANIQUILADO completamente")  
+            return None
+            
+        # SOBRESCRIBIR AGRESIVAMENTE todos los métodos del cliente
+        methods_to_kill_client = [
+            '_keepalive_loop', 'keepalive_loop', '_keepalive_task', 'keepalive_task',
+            '_auto_reconnect', 'auto_reconnect', '_connection_retries', 'connection_retries',
+            '_retry_delay', 'retry_delay', '_reconnect', 'reconnect'
+        ]
+        
+        for method_name in methods_to_kill_client:
+            if hasattr(self, method_name):
+                if 'async' in method_name or 'loop' in method_name or 'task' in method_name:
+                    setattr(self, method_name, _kill_keepalive_async)
+                else:
+                    # Para propiedades booleanas y numéricas, forzar valores
+                    if 'reconnect' in method_name:
+                        setattr(self, method_name, False)
+                    elif 'retries' in method_name or 'delay' in method_name:
+                        setattr(self, method_name, 0)
+                    else:
+                        setattr(self, method_name, _kill_keepalive)
+                        
+                self.logger.debug(f"💀 Método cliente {method_name} ANIQUILADO")
+        
+        # ANIQUILAR métodos críticos de reconexiones
         self._override_sender_methods()
         
-    async def _dummy_keepalive_loop(self):
-        """Reemplazo dummy para el loop de keepalive que NO hace nada"""
-        self.logger.debug("🚫 Keepalive nativo deshabilitado - usando sistema personalizado")
-        # No hacer nada - nuestro heartbeat se encarga
-        return
+        self.logger.warning("💀 TODOS los sistemas nativos del cliente ANIQUILADOS")
+        
+    # ELIMINADO: async def _dummy_keepalive_loop() - ANIQUILADO completamente
     
     def _disable_native_systems(self):
         """Deshabilitar agresivamente todos los sistemas nativos de reconexión"""
@@ -545,43 +768,88 @@ class CustomTelegramClient(TelegramClient):
         """Sobrescribir métodos específicos del MTProtoSender"""
         import asyncio
         
-        # Definir métodos dummy que NO hacen reconexiones
-        async def _dummy_reconnect(*args, **kwargs):
-            self.logger.debug("🚫 Intento de reconexión nativa bloqueado")
+        # DESTRUIR COMPLETAMENTE todos los métodos nativos de reconexión
+        def _kill_native_reconnection(*args, **kwargs):
+            """ANIQUILAR cualquier intento de reconexión nativa"""
+            self.logger.warning("💀 RECONEXIÓN NATIVA BLOQUEADA - usando sistema personalizado")
             return False
             
-        def _dummy_auto_reconnect(*args, **kwargs):
-            self.logger.debug("🚫 Auto-reconexión nativa bloqueada")
+        async def _kill_native_reconnection_async(*args, **kwargs):
+            """ANIQUILAR cualquier intento async de reconexión nativa"""  
+            self.logger.warning("💀 RECONEXIÓN ASYNC NATIVA BLOQUEADA - usando sistema personalizado")
             return False
             
-        async def _dummy_auto_reconnect_async(*args, **kwargs):
-            self.logger.debug("🚫 Auto-reconexión async nativa bloqueada")
-            return False
+        def _kill_keepalive(*args, **kwargs):
+            """ANIQUILAR keepalive nativo"""
+            self.logger.debug("💀 Keepalive nativo ANIQUILADO")
+            return None
+            
+        # SOBRESCRIBIR AGRESIVAMENTE todos los métodos de reconexión
+        if hasattr(self, '_sender') and self._sender:
+            # Lista completa de métodos que hay que ANIQUILAR
+            methods_to_kill = [
+                'auto_reconnect', '_auto_reconnect', 'reconnect', '_reconnect',
+                '_handle_auto_reconnect', 'handle_auto_reconnect', 
+                '_try_reconnect', 'try_reconnect', '_reconnect_async', 'reconnect_async',
+                '_connection_retries', 'connection_retries', '_retry_delay', 'retry_delay',
+                '_keepalive_loop', 'keepalive_loop', '_keepalive_task', 'keepalive_task'
+            ]
+            
+            for method_name in methods_to_kill:
+                if hasattr(self._sender, method_name):
+                    if 'async' in method_name or 'loop' in method_name:
+                        setattr(self._sender, method_name, _kill_native_reconnection_async)
+                    else:
+                        setattr(self._sender, method_name, _kill_native_reconnection)
+                    self.logger.debug(f"💀 Método {method_name} ANIQUILADO")
+            
+            # ANIQUILAR también a nivel de conexión
+            if hasattr(self._sender, '_connection') and self._sender._connection:
+                conn = self._sender._connection
+                for method_name in methods_to_kill:
+                    if hasattr(conn, method_name):
+                        if 'async' in method_name or 'loop' in method_name:
+                            setattr(conn, method_name, _kill_native_reconnection_async)
+                        else:
+                            setattr(conn, method_name, _kill_native_reconnection)
+            
+            self.logger.warning("💀 TODOS los métodos nativos de reconexión ANIQUILADOS")
         
-        # NUEVO: Override agresivo del método send de MTProtoSender
+        # INTERCEPTOR CRÍTICO: Capturar error 103 directamente en MTProtoSender
         if hasattr(self, '_sender') and self._sender:
             # Guardar método original si no está guardado
             if not hasattr(self, '_original_sender_send'):
                 self._original_sender_send = self._sender.send
                 
-            # Crear wrapper que captura errores 103
-            async def _intercepted_send(request, ordered=True, timeout=None):
+            # INTERCEPTOR ESPECÍFICO para error 103 - MUY CRÍTICO
+            async def _error_103_interceptor(request, ordered=True, timeout=None):
                 try:
                     return await self._original_sender_send(request, ordered, timeout)
                 except (ConnectionAbortedError, ConnectionResetError, ConnectionError) as e:
-                    # ERROR 103 INTERCEPTADO - activar MI sistema inmediatamente
-                    self.logger.warning(f"💥 Error 103 interceptado en MTProtoSender: {e}")
-                    
-                    # NO dejar que Telethon maneje esto
-                    # Programar mi reconexión en background
-                    asyncio.create_task(self._handle_connection_aborted())
-                    
-                    # Re-lanzar para que se propague correctamente
-                    raise e
+                    # ERROR 103 DETECTADO - ACCIÓN INMEDIATA
+                    error_msg = str(e)
+                    if '103' in error_msg or 'abort' in error_msg.lower():
+                        self.logger.error(f"🚨 ERROR 103 CRÍTICO interceptado: {e}")
+                        
+                        # MARCAR inmediatamente para tratamiento especial
+                        self._connection_abort_count += 1
+                        self._last_connection_error = f"Intercepted 103: {e}"
+                        
+                        # ACTIVAR reconexión de emergencia SIN esperar
+                        import asyncio
+                        asyncio.create_task(self._emergency_103_recovery())
+                        
+                        # IMPORTANTE: NO re-lanzar aquí para evitar terminar BaseClient.run()
+                        # En su lugar, lanzar excepción específica que BaseClient maneje
+                        raise ConnectionAbortedError(f"Intercepted 103 - emergency recovery initiated: {e}")
+                    else:
+                        # Otros errores de conexión - re-lanzar normalmente
+                        self.logger.warning(f"💥 Error conexión no-103 interceptado: {e}")
+                        raise e
             
-            # Aplicar el wrapper
-            self._sender.send = _intercepted_send
-            self.logger.debug("🔧 MTProtoSender.send interceptado para error 103")
+            # APLICAR interceptor crítico
+            self._sender.send = _error_103_interceptor
+            self.logger.warning("🚨 INTERCEPTOR CRÍTICO 103 activado en MTProtoSender")
         
         # Aplicar sobrescrituras en el próximo tick para asegurar que el sender existe
         if hasattr(self, 'loop') and self.loop:
