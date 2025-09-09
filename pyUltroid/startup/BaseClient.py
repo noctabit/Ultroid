@@ -244,39 +244,53 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         try:
             self.run_until_disconnected()
         except ConnectionAbortedError as e:
-            self.logger.info(f"🔌 Conexión terminada por error 103: {e}")
-            # NO terminar - activar reconexión personalizada
+            self.logger.error(f"🚨 ERROR 103 en BaseClient.run(): {e}")
+            # Activar sistema mejorado de reconexión para error 103
             if hasattr(self, '_handle_connection_aborted'):
-                self.logger.info("🔄 Activando sistema de reconexión personalizado tras error 103...")
-                # Ejecutar reconexión en el loop principal
+                self.logger.error("🚨 Activando sistema mejorado de error 103...")
                 import asyncio
                 try:
                     loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
                     if loop and not loop.is_closed():
+                        # Dar tiempo para que otros handlers terminen
+                        await_time = 0.5
+                        self.logger.error(f"⏳ Esperando {await_time}s antes de activar recuperación...")
+                        
+                        # Ejecutar el sistema mejorado
+                        success = loop.run_until_complete(
+                            asyncio.sleep(await_time)
+                        )
                         success = loop.run_until_complete(self._handle_connection_aborted())
+                        
                         if success:
-                            # Después de reconectar exitosamente, seguir ejecutando
-                            self.logger.info("🔄 Reconexión exitosa - bot continuará automáticamente")
-                            # NO llamar self.run() recursivamente - dejar que el loop continue
+                            self.logger.error("✅ SISTEMA DE ERROR 103 EXITOSO - continuando...")
+                            # Continuar ejecución después de recuperación exitosa
+                            try:
+                                self.run_until_disconnected()
+                            except ConnectionAbortedError as e2:
+                                # Si ocurre otro error 103, manejar recursivamente
+                                self.logger.error(f"🚨 SEGUNDO ERROR 103: {e2}")
+                                # Intentar una vez más
+                                success2 = loop.run_until_complete(self._handle_connection_aborted())
+                                if success2:
+                                    self.logger.error("✅ SEGUNDO ERROR 103 RESUELTO")
+                                    self.run_until_disconnected()
+                                else:
+                                    self.logger.error("❌ SEGUNDO ERROR 103 NO RESUELTO - terminando")
+                                    raise
                             return
                         else:
-                            # Si la reconexión falló, intentar una vez más
-                            self.logger.warning("⚠️ Reconexión falló - último intento...")
-                            final_attempt = loop.run_until_complete(self._handle_connection_aborted())
-                            if final_attempt:
-                                self.logger.info("🔄 Último intento exitoso - bot continuará automáticamente")
-                                # NO llamar self.run() recursivamente
-                                return
-                            else:
-                                self.logger.error("❌ Reconexión completamente fallida - terminando")
-                                raise
+                            self.logger.error("❌ Sistema de error 103 falló - terminando")
+                            raise
                     else:
-                        self.logger.error("❌ Loop cerrado - no se puede reconectar")
+                        self.logger.error("❌ Loop cerrado - no se puede manejar error 103")
+                        raise
                 except Exception as reconnect_error:
-                    self.logger.error(f"❌ Error crítico durante reconexión: {reconnect_error}")
+                    self.logger.error(f"❌ Error crítico manejando error 103: {reconnect_error}")
                     raise
             else:
-                self.logger.warning("⚠️ Sistema de reconexión no disponible - terminando")
+                self.logger.error("❌ Sistema de error 103 no disponible - terminando")
+                raise
         except KeyboardInterrupt:
             self.logger.info("🛑 Bot detenido por el usuario")
         except Exception as e:

@@ -434,34 +434,39 @@ class CustomTelegramClient(TelegramClient):
         self.logger.debug("📊 Contadores de conexión reseteados")
     
     async def _handle_connection_aborted(self):
-        """Sistema simplificado de reconexión sin recursión"""
-        self.logger.warning("🔄 Iniciando reconexión tras error de conexión")
+        """Manejo específico para error 103 - SISTEMA MEJORADO"""
+        self.logger.error("🚨 MANEJO DE ERROR 103 ACTIVADO")
         
-        # Evitar múltiples reconexiones simultáneas
-        if self._reconnecting:
-            self.logger.info("🔄 Reconexión ya en progreso - esperando")
+        # Prevenir múltiples ejecuciones del manejo de error 103
+        if getattr(self, '_handling_103', False):
+            self.logger.info("🚨 Manejo de error 103 ya en progreso")
             return False
         
-        self._reconnecting = True
+        self._handling_103 = True
         
         try:
-            # Marcar el error
+            # Marcar específicamente error 103
             self._connection_abort_count += 1
             self._last_connection_error = "ConnectionAbortedError (103)"
             
-            # Intentar reconexión simple
-            success = await self._simple_reconnect()
+            self.logger.error(f"🚨 Error 103 #{self._connection_abort_count} detectado")
+            
+            # PASO 1: Limpieza agresiva inmediata para error 103
+            await self._aggressive_103_cleanup()
+            
+            # PASO 2: Intentos específicos para error 103
+            success = await self._error_103_recovery()
             
             if success:
-                self.logger.info("✅ Reconexión exitosa")
+                self.logger.error("✅ ERROR 103 SUPERADO EXITOSAMENTE!")
                 self._reset_connection_counters()
             else:
-                self.logger.error("❌ Reconexión falló")
+                self.logger.error("❌ Error 103 no pudo ser superado")
             
             return success
             
         finally:
-            self._reconnecting = False
+            self._handling_103 = False
     
     async def _simple_reconnect(self):
         """Método simple de reconexión sin complejidad recursiva"""
@@ -541,43 +546,88 @@ class CustomTelegramClient(TelegramClient):
         finally:
             self._reconnecting = False
 
-    async def _emergency_103_recovery(self):
-        """Recuperación de emergencia para error 103 - sin recursión"""
-        if getattr(self, '_emergency_103_active', False):
-            return False
-            
-        self._emergency_103_active = True
+    async def _aggressive_103_cleanup(self):
+        """Limpieza ultra-agresiva específica para error 103"""
+        self.logger.error("🧹 LIMPIEZA AGRESIVA ERROR 103")
         
         try:
-            self.logger.error("🚨 SISTEMA DE EMERGENCIA 103 ACTIVADO")
-            
-            # 3 intentos rápidos para error 103
-            for attempt in range(1, 4):
-                self.logger.error(f"🚨 INTENTO EMERGENCIA 103: {attempt}/3")
-                
+            # Cancelar cualquier tarea pendiente
+            if hasattr(self, '_sender') and self._sender:
                 try:
-                    await self._total_telethon_annihilation()
-                    await asyncio.sleep(0.8)
-                    
-                    await super().connect()
-                    self._setup_complete_override()
-                    self._disable_native_systems()
-                    
-                    if self.is_connected():
-                        await asyncio.wait_for(self.get_me(), timeout=1.5)
-                        self.logger.error("🚨 EMERGENCIA 103 RESUELTA EXITOSAMENTE!")
+                    # Forzar desconexión del sender
+                    await self._sender.disconnect()
+                    self.logger.debug("🧹 Sender desconectado")
+                except:
+                    pass
+            
+            # Desconexión forzada del cliente
+            try:
+                await super().disconnect()
+                self.logger.debug("🧹 Cliente desconectado")
+            except:
+                pass
+            
+            # Resetear flags manualmente
+            self._connected = False
+            if hasattr(self, '_authorized'):
+                self._authorized = False
+            
+            # Espera específica para error 103
+            await asyncio.sleep(2.0)
+            
+            self.logger.error("✅ Limpieza agresiva 103 completada")
+            
+        except Exception as e:
+            self.logger.error(f"⚠️ Error durante limpieza 103: {e}")
+    
+    async def _error_103_recovery(self):
+        """Sistema de recuperación específico para error 103"""
+        self.logger.error("🔄 INICIANDO RECUPERACIÓN ERROR 103")
+        
+        # Configuración específica para error 103
+        max_attempts = 5
+        base_delay = 1.0
+        
+        for attempt in range(1, max_attempts + 1):
+            self.logger.error(f"🚨 RECUPERACIÓN 103 - Intento {attempt}/{max_attempts}")
+            
+            try:
+                # Configurar parámetros anti-reconexión nativa
+                self._auto_reconnect = False
+                
+                # Intentar reconexión directa
+                await super().connect()
+                
+                # Verificar conexión inmediatamente
+                if self.is_connected():
+                    # Test funcional con timeout corto para error 103
+                    try:
+                        await asyncio.wait_for(self.get_me(), timeout=3.0)
+                        
+                        # Deshabilitar sistemas nativos inmediatamente
+                        self._disable_native_systems()
+                        
+                        self.logger.error("✅ RECUPERACIÓN 103 EXITOSA!")
                         return True
                         
-                except Exception as e:
-                    self.logger.error(f"❌ Intento emergencia 103 #{attempt} falló: {e}")
+                    except asyncio.TimeoutError:
+                        self.logger.error(f"❌ Timeout en test - intento {attempt}")
+                    except Exception as test_e:
+                        self.logger.error(f"❌ Test falló: {test_e}")
+                else:
+                    self.logger.error(f"❌ Conexión no establecida - intento {attempt}")
                     
-                await asyncio.sleep(0.3)
+            except Exception as conn_e:
+                self.logger.error(f"❌ Error conexión intento {attempt}: {conn_e}")
             
-            self.logger.error("❌ Sistema de emergencia 103 falló")
-            return False
-            
-        finally:
-            self._emergency_103_active = False
+            # Esperar antes del siguiente intento (incrementalmente)
+            if attempt < max_attempts:
+                delay = base_delay * attempt
+                self.logger.error(f"⏳ Esperando {delay}s antes del siguiente intento...")
+                await asyncio.sleep(delay)
+        
+        self.logger.error("❌ RECUPERACIÓN 103 FALLÓ COMPLETAMENTE")
+        return False
 
     async def _aggressive_reconnection_takeover(self, force=False):
         """MI SISTEMA de reconexión ULTRA AGRESIVO - optimizado para ERROR 103"""
@@ -966,24 +1016,31 @@ class CustomTelegramClient(TelegramClient):
             if not hasattr(self, '_original_sender_send'):
                 self._original_sender_send = self._sender.send
                 
-            # INTERCEPTOR ESPECÍFICO para error 103 - SIN RECURSIÓN
+            # INTERCEPTOR MEJORADO para error 103
             async def _error_103_interceptor(request, ordered=True, timeout=None):
                 try:
                     return await self._original_sender_send(request, ordered, timeout)
                 except (ConnectionAbortedError, ConnectionResetError, ConnectionError) as e:
-                    # ERROR 103 DETECTADO - MARCAR SOLAMENTE, NO CREAR TAREAS
-                    error_msg = str(e)
-                    if '103' in error_msg or 'abort' in error_msg.lower():
-                        self.logger.error(f"🚨 ERROR 103 CRÍTICO interceptado: {e}")
+                    error_msg = str(e).lower()
+                    
+                    # Detectar específicamente error 103
+                    if '103' in error_msg or 'abort' in error_msg or 'software caused connection' in error_msg:
+                        self.logger.error(f"🚨 ERROR 103 INTERCEPTADO: {e}")
                         
-                        # SOLO marcar, sin crear tareas automáticas
+                        # Marcar error 103
                         self._connection_abort_count += 1
-                        self._last_connection_error = f"Intercepted 103: {e}"
+                        self._last_connection_error = f"Error 103 interceptado: {e}"
                         
-                        # Lanzar para que BaseClient.run() lo maneje
-                        raise ConnectionAbortedError(f"Error 103 interceptado: {e}")
+                        # Activar manejo de error 103 en background SIN ESPERAR
+                        if not getattr(self, '_handling_103', False):
+                            import asyncio
+                            asyncio.create_task(self._handle_connection_aborted())
+                        
+                        # Relanzar para que llegue a BaseClient.run()
+                        raise ConnectionAbortedError(f"Error 103 detectado: {e}")
                     else:
-                        # Otros errores - re-lanzar normalmente
+                        # Otros errores de conexión
+                        self.logger.warning(f"💥 Error conexión interceptado: {e}")
                         raise e
             
             # APLICAR interceptor seguro
