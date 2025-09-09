@@ -60,8 +60,14 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
 
     @property
     def __dict__(self):
-        if self.me:
-            return self.me.to_dict()
+        # Evitar recursión infinita al acceder a __dict__
+        try:
+            if hasattr(self, 'me') and self.me:
+                return self.me.to_dict()
+            return object.__getattribute__(self, '__dict__')
+        except (AttributeError, RecursionError):
+            # Fallback seguro en caso de error
+            return {}
 
     async def start_client(self, **kwargs):
         """function to start client with improved error handling"""
@@ -250,17 +256,20 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
                         success = loop.run_until_complete(self._handle_connection_aborted())
                         if success:
                             # Después de reconectar exitosamente, seguir ejecutando
-                            self.logger.info("🔄 Reiniciando bot tras reconexión exitosa...")
-                            self.run()  # Recursivo para continuar funcionando
+                            self.logger.info("🔄 Reconexión exitosa - bot continuará automáticamente")
+                            # NO llamar self.run() recursivamente - dejar que el loop continue
+                            return
                         else:
                             # Si la reconexión falló, intentar una vez más
                             self.logger.warning("⚠️ Reconexión falló - último intento...")
                             final_attempt = loop.run_until_complete(self._handle_connection_aborted())
                             if final_attempt:
-                                self.logger.info("🔄 Último intento exitoso - reiniciando bot...")
-                                self.run()
+                                self.logger.info("🔄 Último intento exitoso - bot continuará automáticamente")
+                                # NO llamar self.run() recursivamente
+                                return
                             else:
                                 self.logger.error("❌ Reconexión completamente fallida - terminando")
+                                raise
                     else:
                         self.logger.error("❌ Loop cerrado - no se puede reconectar")
                 except Exception as reconnect_error:
