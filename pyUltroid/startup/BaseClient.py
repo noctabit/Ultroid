@@ -102,8 +102,8 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             if self._log_at:
                 self.logger.info(f"✅ Logged in as {me}")
             self._bot = await self.is_bot()
-            # El heartbeat se maneja automáticamente por Telethon
-            self.logger.info("💓 Cliente conectado exitosamente")
+            # Iniciar nuestro sistema mejorado de heartbeat después de la conexión exitosa
+            self._start_heartbeat_when_ready()
         except Exception as e:
             self.logger.error(f"❌ Error getting user info: {e}")
             if self._handle_error:
@@ -256,15 +256,63 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         """Client's user id"""
         return self.me.id
 
-    def _start_heartbeat(self):
-        """Heartbeat simplificado - Telethon ya maneja la reconexión automáticamente"""
-        # Telethon ya tiene auto_reconnect=True, no necesitamos heartbeat personalizado
-        pass
+    def _start_heartbeat_when_ready(self):
+        """Iniciar heartbeat después de que el cliente esté completamente conectado"""
+        import asyncio
+        # Programar el heartbeat para la próxima iteración del event loop
+        if hasattr(self, 'loop') and self.loop:
+            self.loop.call_later(1, self._init_heartbeat_task)
+        
+    def _init_heartbeat_task(self):
+        """Inicializar el task del heartbeat de forma segura"""
+        import asyncio
+        try:
+            if self._heartbeat_task is None:
+                self._heartbeat_task = self.loop.create_task(self._heartbeat_loop())
+                self.logger.info("💓 Sistema de heartbeat mejorado iniciado")
+        except Exception as e:
+            self.logger.warning(f"💓 Error al iniciar heartbeat: {e}")
+
+    async def _heartbeat_loop(self):
+        """Loop de heartbeat mejorado para mantener conexión activa"""
+        import asyncio
+        heartbeat_interval = 30  # 30 segundos
+        
+        while True:
+            try:
+                await asyncio.sleep(heartbeat_interval)
+                
+                if not self.is_connected():
+                    self.logger.warning("💓 Heartbeat: Conexión perdida, activando reconexión")
+                    # Activar nuestro sistema de reconexión personalizado
+                    if hasattr(self, '_handle_reconnection'):
+                        asyncio.create_task(self._handle_reconnection())
+                    break
+                else:
+                    # Ping ligero para mantener la conexión activa
+                    try:
+                        await self.get_me()
+                        self.logger.debug("💓 Heartbeat: Conexión activa")
+                    except Exception as e:
+                        self.logger.warning(f"💓 Heartbeat ping falló: {e}")
+                        # Si el ping falla, puede que necesitemos reconectar
+                        if hasattr(self, '_handle_reconnection'):
+                            asyncio.create_task(self._handle_reconnection())
+                        break
+                        
+            except asyncio.CancelledError:
+                self.logger.info("💓 Heartbeat cancelado")
+                break
+            except Exception as e:
+                self.logger.error(f"💓 Error en heartbeat: {e}")
+                await asyncio.sleep(10)  # Esperar antes de reintentar
 
     def stop_heartbeat(self):
-        """Detener el heartbeat"""
-        # Ya no usamos heartbeat personalizado
-        pass
+        """Detener el sistema de heartbeat"""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            self._heartbeat_task = None
+            self.logger.info("💓 Heartbeat detenido")
 
     def to_dict(self):
         return dict(inspect.getmembers(self))
