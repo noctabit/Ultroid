@@ -50,6 +50,9 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         super().__init__(session, **kwargs)
         self.run_in_loop(self.start_client(bot_token=bot_token))
         self.dc_id = self.session.dc_id
+        
+        # Configurar reconexión automática después de la inicialización
+        self._setup_reconnection_system()
 
     def __repr__(self):
         return f"<Ultroid.Client :\n self: {self.full_name}\n bot: {self._bot}\n>"
@@ -91,6 +94,17 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         if self._log_at:
             self.logger.info(f"Logged in as {me}")
         self._bot = await self.is_bot()
+        
+    def _setup_reconnection_system(self):
+        \"\"\"Configurar sistema de reconexión después de la inicialización\"\"\"
+        try:
+            # Configurar parámetros de reconexión optimizados
+            if hasattr(self, '_connection_failures'):
+                self._connection_failures = 0
+            if hasattr(self, '_max_reconnect_attempts'):
+                self._max_reconnect_attempts = 5
+            
+            self.logger.info(\"🔧 Sistema de reconexión configurado\")
 
     async def fast_uploader(self, file, **kwargs):
         """Upload files in a faster way"""
@@ -216,8 +230,42 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         return self.loop.run_until_complete(function)
 
     def run(self):
-        """run asyncio loop"""
-        self.run_until_disconnected()
+        """run asyncio loop with reconnection handling"""
+        try:
+            # Activar monitoreo de conexión automático
+            if hasattr(self, 'start_simple_monitoring'):
+                self.start_simple_monitoring()
+                self.logger.info("🔍 Sistema de monitoreo de conexión activado")
+            
+            self.run_until_disconnected()
+        except ConnectionAbortedError as e:
+            self.logger.error(f"🚨 Error 103 capturado: {e}")
+            # Intentar reconexión inmediata
+            import asyncio
+            try:
+                loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
+                if loop and not loop.is_closed():
+                    self.logger.error("🔄 Intentando reconexión inmediata...")
+                    success = loop.run_until_complete(self.simple_reconnect())
+                    
+                    if success:
+                        self.logger.error("✅ Reconexión exitosa, continuando...")
+                        # Continuar ejecución después de reconexión
+                        self.run_until_disconnected()
+                    else:
+                        self.logger.error("❌ Reconexión falló")
+                        raise
+                else:
+                    self.logger.error("❌ No se puede reconectar: loop cerrado")
+                    raise
+            except Exception as reconnect_error:
+                self.logger.error(f"❌ Error durante reconexión: {reconnect_error}")
+                raise
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Bot detenido por el usuario")
+        except Exception as e:
+            self.logger.error(f"❌ Error crítico: {e}")
+            raise
 
     def add_handler(self, func, *args, **kwargs):
         """Add new event handler, ignoring if exists"""
