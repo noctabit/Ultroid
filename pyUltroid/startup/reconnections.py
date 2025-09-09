@@ -558,6 +558,31 @@ class CustomTelegramClient(TelegramClient):
             self.logger.debug("🚫 Auto-reconexión async nativa bloqueada")
             return False
         
+        # NUEVO: Override agresivo del método send de MTProtoSender
+        if hasattr(self, '_sender') and self._sender:
+            # Guardar método original si no está guardado
+            if not hasattr(self, '_original_sender_send'):
+                self._original_sender_send = self._sender.send
+                
+            # Crear wrapper que captura errores 103
+            async def _intercepted_send(request, ordered=True, timeout=None):
+                try:
+                    return await self._original_sender_send(request, ordered, timeout)
+                except (ConnectionAbortedError, ConnectionResetError, ConnectionError) as e:
+                    # ERROR 103 INTERCEPTADO - activar MI sistema inmediatamente
+                    self.logger.warning(f"💥 Error 103 interceptado en MTProtoSender: {e}")
+                    
+                    # NO dejar que Telethon maneje esto
+                    # Programar mi reconexión en background
+                    asyncio.create_task(self._handle_connection_aborted())
+                    
+                    # Re-lanzar para que se propague correctamente
+                    raise e
+            
+            # Aplicar el wrapper
+            self._sender.send = _intercepted_send
+            self.logger.debug("🔧 MTProtoSender.send interceptado para error 103")
+        
         # Aplicar sobrescrituras en el próximo tick para asegurar que el sender existe
         if hasattr(self, 'loop') and self.loop:
             self.loop.call_soon(self._apply_sender_overrides)
