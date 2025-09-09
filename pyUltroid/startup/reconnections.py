@@ -93,6 +93,8 @@ class CustomTelegramClient(TelegramClient):
         if hasattr(event, 'original_update') and hasattr(event.original_update, '__class__'):
             event_type = event.original_update.__class__.__name__
             if 'UpdatesTooLong' in event_type or 'UpdateConnectionState' in event_type:
+                # Doble verificación antes de activar reconexión
+                await asyncio.sleep(2)  # Pequeña pausa para evitar reconexiones precipitadas
                 if not self.is_connected() and not self._reconnecting:
                     self.logger.warning(f"🔌 Evento de desconexión detectado: {event_type}")
                     asyncio.create_task(self._handle_reconnection())
@@ -186,21 +188,11 @@ class CustomTelegramClient(TelegramClient):
             self.logger.warning(f"⚠️ Error durante desconexión: {e}")
 
     def is_connected(self):
-        """Verificación del estado de conexión más estable"""
+        """Verificación mejorada del estado de conexión"""
         try:
-            # Verificación básica primero
-            basic_connected = super().is_connected()
-            if not basic_connected:
-                return False
-            
-            # Verificación adicional solo si es necesario
-            if hasattr(self, '_sender') and self._sender:
-                return not getattr(self._sender, 'is_disconnected', lambda: False)()
-            
-            return basic_connected
-        except Exception:
-            # En caso de error, mejor asumir que está conectado para evitar reconexiones innecesarias
-            return super().is_connected() if hasattr(super(), 'is_connected') else False
+            return super().is_connected() and hasattr(self, '_sender') and self._sender and not self._sender.is_disconnected()
+        except:
+            return False
 
 
 
