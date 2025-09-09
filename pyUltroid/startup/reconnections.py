@@ -40,6 +40,9 @@ class CustomTelegramClient(TelegramClient):
         
         # Deshabilitar completamente el sistema de keepalive de Telethon
         self._keepalive_task = None
+        
+        # Sobrescribir métodos internos de Telethon para control total
+        self._setup_complete_override()
 
     async def connect(self, retries=3, *args, **kwargs):
         """Conexión mejorada con manejo de errores"""
@@ -56,10 +59,11 @@ class CustomTelegramClient(TelegramClient):
                 
                 await super().connect(*args, **kwargs)
                 
-                # IMPORTANTE: Deshabilitar keepalive task inmediatamente después de conectar
-                if hasattr(self, '_keepalive_task') and self._keepalive_task:
-                    self._keepalive_task.cancel()
-                    self._keepalive_task = None
+                # IMPORTANTE: Deshabilitar completamente todos los sistemas nativos
+                self._disable_native_systems()
+                
+                # Aplicar sobrescrituras inmediatamente después de conectar
+                self._apply_sender_overrides()
                 
                 # Verificar conexión más robusta
                 if self.is_connected():
@@ -257,6 +261,80 @@ class CustomTelegramClient(TelegramClient):
                 self.logger.info("✅ Cliente desconectado (async explícito)")
         except Exception as e:
             self.logger.warning(f"⚠️ Error durante desconexión async explícito: {e}")
+    
+    def _setup_complete_override(self):
+        """Configurar sobrescritura completa de métodos internos de Telethon"""
+        # Sobrescribir métodos que causan reconexiones automáticas
+        self._original_keepalive_loop = getattr(self, '_keepalive_loop', None)
+        self._keepalive_loop = self._dummy_keepalive_loop
+        
+        # Deshabilitar auto reconexión a nivel interno
+        self._auto_reconnect = False
+        
+        # Sobrescribir métodos críticos de reconexiones
+        self._override_sender_methods()
+        
+    async def _dummy_keepalive_loop(self):
+        """Reemplazo dummy para el loop de keepalive que NO hace nada"""
+        self.logger.debug("🚫 Keepalive nativo deshabilitado - usando sistema personalizado")
+        # No hacer nada - nuestro heartbeat se encarga
+        return
+    
+    def _disable_native_systems(self):
+        """Deshabilitar agresivamente todos los sistemas nativos de reconexión"""
+        try:
+            # Cancelar cualquier task de keepalive activo
+            if hasattr(self, '_keepalive_task') and self._keepalive_task:
+                self._keepalive_task.cancel()
+                self._keepalive_task = None
+                
+            # Deshabilitar a nivel de sender si existe
+            if hasattr(self, '_sender') and self._sender:
+                if hasattr(self._sender, '_auto_reconnect'):
+                    self._sender._auto_reconnect = False
+                if hasattr(self._sender, '_retries'):
+                    self._sender._retries = 0
+                if hasattr(self._sender, '_retry_delay'):
+                    self._sender._retry_delay = 0
+                    
+            self.logger.debug("🚫 Sistemas nativos de Telethon completamente deshabilitados")
+        except Exception as e:
+            self.logger.debug(f"⚠️ Error deshabilitando sistemas nativos: {e}")
+    
+    def _override_sender_methods(self):
+        """Sobrescribir métodos específicos del MTProtoSender"""
+        import asyncio
+        
+        # Definir métodos dummy que NO hacen reconexiones
+        async def _dummy_reconnect(*args, **kwargs):
+            self.logger.debug("🚫 Intento de reconexión nativa bloqueado")
+            return False
+            
+        def _dummy_auto_reconnect(*args, **kwargs):
+            self.logger.debug("🚫 Auto-reconexión nativa bloqueada")
+            return False
+            
+        async def _dummy_auto_reconnect_async(*args, **kwargs):
+            self.logger.debug("🚫 Auto-reconexión async nativa bloqueada")
+            return False
+        
+        # Aplicar sobrescrituras en el próximo tick para asegurar que el sender existe
+        if hasattr(self, 'loop') and self.loop:
+            self.loop.call_soon(self._apply_sender_overrides)
+    
+    def _apply_sender_overrides(self):
+        """Aplicar sobrescrituras al sender cuando esté disponible"""
+        try:
+            if hasattr(self, '_sender') and self._sender:
+                # Sobrescribir métodos de reconexión en el sender
+                if hasattr(self._sender, '_reconnect'):
+                    self._sender._reconnect = lambda *args, **kwargs: None
+                if hasattr(self._sender, 'auto_reconnect'):
+                    self._sender.auto_reconnect = False
+                    
+                self.logger.debug("🚫 Métodos de sender sobrescritos exitosamente")
+        except Exception as e:
+            self.logger.debug(f"⚠️ Error sobrescribiendo métodos de sender: {e}")
 
     def is_connected(self):
         """Verificación mejorada del estado de conexión"""
@@ -290,6 +368,8 @@ class CustomTelegramClient(TelegramClient):
             self.logger.debug("🔌 Carga de plugins completada - reactivando sistema de reconexión")
             # Registrar manejadores ahora que los plugins están cargados
             self._register_disconnect_handlers()
+            # Asegurar que los sistemas nativos siguen deshabilitados
+            self._disable_native_systems()
 
 
 
