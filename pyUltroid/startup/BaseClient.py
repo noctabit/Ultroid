@@ -103,6 +103,7 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
                 self.logger.info(f"✅ Logged in as {me}")
             self._bot = await self.is_bot()
             # Iniciar nuestro sistema mejorado de heartbeat después de la conexión exitosa
+            # Pero no durante la carga inicial de plugins
             self._start_heartbeat_when_ready()
         except Exception as e:
             self.logger.error(f"❌ Error getting user info: {e}")
@@ -260,8 +261,19 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         """Iniciar heartbeat después de que el cliente esté completamente conectado"""
         import asyncio
         # Programar el heartbeat para la próxima iteración del event loop
+        # Esperar un poco más para asegurar que la conexión está estable
         if hasattr(self, 'loop') and self.loop:
-            self.loop.call_later(1, self._init_heartbeat_task)
+            self.loop.call_later(3, self._init_heartbeat_task)
+    
+    def prepare_for_plugin_loading(self):
+        """Preparar cliente para carga de plugins sin interferencias"""
+        if hasattr(self, 'set_plugin_loading_state'):
+            self.set_plugin_loading_state(True)
+            
+    def complete_plugin_loading(self):
+        """Completar carga de plugins y reactivar sistema de reconexión"""
+        if hasattr(self, 'set_plugin_loading_state'):
+            self.set_plugin_loading_state(False)
         
     def _init_heartbeat_task(self):
         """Inicializar el task del heartbeat de forma segura"""
@@ -280,9 +292,17 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         consecutive_failures = 0
         max_failures = 2  # Permitir 2 fallos antes de reconectar
         
+        # Espera inicial para permitir que la conexión se estabilice
+        await asyncio.sleep(10)
+        
         while True:
             try:
                 await asyncio.sleep(heartbeat_interval)
+                
+                # No verificar durante la carga de plugins
+                if getattr(self, '_plugin_loading', False):
+                    self.logger.debug("💓 Heartbeat pausado durante carga de plugins")
+                    continue
                 
                 # Verificación mejorada de conexión
                 if not self.is_connected():

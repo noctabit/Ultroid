@@ -13,15 +13,16 @@ import socket
 
 class CustomTelegramClient(TelegramClient):
     def __init__(self, *args, logger=None, **kwargs):
-        # Mantener la reconexión automática activada pero añadir lógica personalizada
-        kwargs["auto_reconnect"] = True
-        kwargs["connection_retries"] = 5
-        kwargs["retry_delay"] = 1
+        # DESHABILITAR el sistema de reconexión nativo de Telethon para evitar conflictos
+        kwargs["auto_reconnect"] = False  # Nuestro sistema toma control completo
+        kwargs["connection_retries"] = 1   # Solo 1 intento nativo, luego nuestro sistema
+        kwargs["retry_delay"] = 0         # Sin delay nativo
         super().__init__(*args, **kwargs)
         self.logger = logger or logging.getLogger("Reconnections")
         self._reconnecting = False
         self._max_retries = 50
         self._current_retries = 0
+        self._plugin_loading = False  # Flag para evitar conflictos durante carga de plugins
         self.retries = [
             (5, 5),     # 5 intentos cada 5 segundos
             (5, 10),    # 5 intentos cada 10 segundos  
@@ -33,8 +34,9 @@ class CustomTelegramClient(TelegramClient):
             (10, 3600), # 10 intentos cada hora
         ]
         
-        # Registrar manejadores de eventos de conexión
-        self.add_event_handler(self._handle_disconnect, events.Raw)
+        # Registrar manejadores de eventos de conexión DESPUÉS de la carga de plugins
+        # Para evitar interferencias durante la inicialización
+        self._event_handlers_registered = False
 
     async def connect(self, retries=3, *args, **kwargs):
         """Conexión mejorada con manejo de errores"""
@@ -88,8 +90,19 @@ class CustomTelegramClient(TelegramClient):
         
         return False
 
+    def _register_disconnect_handlers(self):
+        """Registrar manejadores de desconexión después de que todo esté listo"""
+        if not self._event_handlers_registered:
+            self.add_event_handler(self._handle_disconnect, events.Raw)
+            self._event_handlers_registered = True
+            self.logger.info("🔌 Manejadores de desconexión registrados")
+
     async def _handle_disconnect(self, event):
         """Maneja eventos de desconexión automáticamente"""
+        # No procesar eventos durante la carga de plugins
+        if self._plugin_loading:
+            return
+            
         if hasattr(event, 'original_update') and hasattr(event.original_update, '__class__'):
             event_type = event.original_update.__class__.__name__
             if 'UpdatesTooLong' in event_type or 'UpdateConnectionState' in event_type:
@@ -104,6 +117,13 @@ class CustomTelegramClient(TelegramClient):
         if self._reconnecting:
             self.logger.debug("🔄 Reconexión ya en progreso, ignorando solicitud")
             return
+        
+        # No reconectar durante la carga de plugins
+        if self._plugin_loading:
+            self.logger.debug("🔄 Carga de plugins en progreso, posponiendo reconexión")
+            await asyncio.sleep(10)
+            if self._plugin_loading:  # Si sigue cargando después de 10s
+                return
         
         # Verificar una vez más antes de iniciar reconexión
         if self.is_connected():
@@ -190,9 +210,35 @@ class CustomTelegramClient(TelegramClient):
     def is_connected(self):
         """Verificación mejorada del estado de conexión"""
         try:
-            return super().is_connected() and hasattr(self, '_sender') and self._sender and not self._sender.is_disconnected()
-        except:
-            return False
+            base_connected = super().is_connected()
+            if not base_connected:
+                return False
+            
+            # Verificación adicional de sender solo si tenemos uno
+            if hasattr(self, '_sender') and self._sender:
+                try:
+                    return not self._sender.is_disconnected()
+                except AttributeError:
+                    # Si no tiene is_disconnected, asumimos que está conectado
+                    return True
+            
+            return base_connected
+        except Exception:
+            # En caso de error, usar solo la verificación básica
+            try:
+                return super().is_connected()
+            except Exception:
+                return False
+    
+    def set_plugin_loading_state(self, loading=True):
+        """Establecer estado de carga de plugins para evitar conflictos"""
+        self._plugin_loading = loading
+        if loading:
+            self.logger.debug("🔌 Iniciando carga de plugins - pausando sistema de reconexión")
+        else:
+            self.logger.debug("🔌 Carga de plugins completada - reactivando sistema de reconexión")
+            # Registrar manejadores ahora que los plugins están cargados
+            self._register_disconnect_handlers()
 
 
 

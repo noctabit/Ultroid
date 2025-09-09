@@ -64,6 +64,12 @@ def main():
         _plugins = "autocorrect autopic audiotools compressor forcesubscribe fedutils gdrive glitch instagram nsfwfilter nightmode pdftools profanityfilter writer youtube"
         udB.set_key("EXCLUDE_OFFICIAL", _plugins)
 
+    # Preparar sistemas de reconexión antes de cargar plugins
+    if hasattr(ultroid_bot, 'prepare_for_plugin_loading'):
+        ultroid_bot.prepare_for_plugin_loading()
+    if hasattr(asst, 'prepare_for_plugin_loading'):
+        asst.prepare_for_plugin_loading()
+
     load_other_plugins(addons=addons, pmbot=pmbot, manager=manager, vcbot=vcbot)
 
     suc_msg = """
@@ -81,6 +87,12 @@ def main():
     # Load Addons from Plugin Channels.
     if plugin_channels:
         ultroid_bot.run_in_loop(plug(plugin_channels))
+
+    # Completar carga de plugins y reactivar sistemas de reconexión
+    if hasattr(ultroid_bot, 'complete_plugin_loading'):
+        ultroid_bot.complete_plugin_loading()
+    if hasattr(asst, 'complete_plugin_loading'):
+        asst.complete_plugin_loading()
 
     # Send/Ignore Deploy Message..
     if not udB.get_key("LOG_OFF"):
