@@ -54,7 +54,6 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         self.dc_id = self.session.dc_id
         # Inicializar heartbeat para mantener la conexión activa
         self._heartbeat_task = None
-        self._start_heartbeat()
 
     def __repr__(self):
         return f"<Ultroid.Client :\n self: {self.full_name}\n bot: {self._bot}\n>"
@@ -103,6 +102,8 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             if self._log_at:
                 self.logger.info(f"✅ Logged in as {me}")
             self._bot = await self.is_bot()
+            # Iniciar heartbeat después de que el cliente esté completamente conectado
+            self._start_heartbeat()
         except Exception as e:
             self.logger.error(f"❌ Error getting user info: {e}")
             if self._handle_error:
@@ -258,8 +259,12 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
     def _start_heartbeat(self):
         """Iniciar el heartbeat para mantener la conexión activa"""
         import asyncio
-        if self._heartbeat_task is None:
-            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        try:
+            if self._heartbeat_task is None and self.loop.is_running():
+                self._heartbeat_task = self.loop.create_task(self._heartbeat_loop())
+        except RuntimeError:
+            # No hay event loop corriendo, se iniciará después
+            pass
 
     async def _heartbeat_loop(self):
         """Loop de heartbeat para verificar y mantener la conexión"""
