@@ -13,9 +13,9 @@ import socket
 
 class CustomTelegramClient(TelegramClient):
     def __init__(self, *args, logger=None, **kwargs):
-        # DESHABILITAR el sistema de reconexión nativo de Telethon para evitar conflictos
-        kwargs["auto_reconnect"] = False  # Nuestro sistema toma control completo
-        kwargs["connection_retries"] = 1   # Solo 1 intento nativo, luego nuestro sistema
+        # DESHABILITAR COMPLETAMENTE el sistema de reconexión nativo de Telethon
+        kwargs["auto_reconnect"] = False  # Deshabilitado completamente
+        kwargs["connection_retries"] = 0   # Cero intentos nativos
         kwargs["retry_delay"] = 0         # Sin delay nativo
         super().__init__(*args, **kwargs)
         self.logger = logger or logging.getLogger("Reconnections")
@@ -37,6 +37,9 @@ class CustomTelegramClient(TelegramClient):
         # Registrar manejadores de eventos de conexión DESPUÉS de la carga de plugins
         # Para evitar interferencias durante la inicialización
         self._event_handlers_registered = False
+        
+        # Deshabilitar completamente el sistema de keepalive de Telethon
+        self._keepalive_task = None
 
     async def connect(self, retries=3, *args, **kwargs):
         """Conexión mejorada con manejo de errores"""
@@ -47,7 +50,16 @@ class CustomTelegramClient(TelegramClient):
                     return True
                     
                 self.logger.info(f"Intentando conectar... (intento {attempt + 1}/{retries + 1})")
+                
+                # Forzar configuración sin reconexiones antes de conectar
+                self._auto_reconnect = False
+                
                 await super().connect(*args, **kwargs)
+                
+                # IMPORTANTE: Deshabilitar keepalive task inmediatamente después de conectar
+                if hasattr(self, '_keepalive_task') and self._keepalive_task:
+                    self._keepalive_task.cancel()
+                    self._keepalive_task = None
                 
                 # Verificar conexión más robusta
                 if self.is_connected():
