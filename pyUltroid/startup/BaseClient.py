@@ -11,7 +11,7 @@ import sys
 import time
 from logging import Logger
 
-from .reconnections_simple import SimpleReconnectionClient
+from .reconnections import SimpleReconnectionClient
 from telethon import utils as telethon_utils
 from telethon.errors import (
     AccessTokenExpiredError,
@@ -51,8 +51,6 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         self.run_in_loop(self.start_client(bot_token=bot_token))
         self.dc_id = self.session.dc_id
         
-        # Configurar reconexión automática después de la inicialización
-        self._setup_reconnection_system()
 
     def __repr__(self):
         return f"<Ultroid.Client :\n self: {self.full_name}\n bot: {self._bot}\n>"
@@ -95,18 +93,6 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
             self.logger.info(f"Logged in as {me}")
         self._bot = await self.is_bot()
         
-    def _setup_reconnection_system(self):
-        """Configurar sistema de reconexión después de la inicialización"""
-        try:
-            # Configurar parámetros de reconexión optimizados
-            if hasattr(self, '_connection_failures'):
-                self._connection_failures = 0
-            if hasattr(self, '_max_reconnect_attempts'):
-                self._max_reconnect_attempts = 5
-            
-            self.logger.info("🔧 Sistema de reconexión configurado")
-        except Exception as e:
-            self.logger.warning(f"Error configurando reconexión: {e}")
 
     async def fast_uploader(self, file, **kwargs):
         """Upload files in a faster way"""
@@ -232,30 +218,25 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         return self.loop.run_until_complete(function)
 
     def run(self):
-        """run asyncio loop with reconnection handling"""
+        """run asyncio loop with gradual reconnection"""
         try:
             self.run_until_disconnected()
         except ConnectionAbortedError as e:
             self.logger.error(f"Error 103 capturado: {e}")
-            # Intentar reconexión paulatina
+            # Usar reconexión paulatina
             import asyncio
             try:
                 loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
                 if loop and not loop.is_closed():
-                    self.logger.info("Iniciando reconexión paulatina...")
                     success = loop.run_until_complete(self.gradual_reconnect())
-                    
                     if success:
-                        self.logger.info("Reconexión paulatina exitosa, continuando...")
+                        self.logger.info("Reconexión paulatina exitosa")
                         self.run_until_disconnected()
                     else:
-                        self.logger.error("Reconexión paulatina falló")
                         raise
                 else:
-                    self.logger.error("No se puede reconectar: loop cerrado")
                     raise
-            except Exception as reconnect_error:
-                self.logger.error(f"Error durante reconexión: {reconnect_error}")
+            except Exception:
                 raise
         except KeyboardInterrupt:
             self.logger.info("Bot detenido por el usuario")
