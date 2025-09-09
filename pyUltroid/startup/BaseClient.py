@@ -234,39 +234,33 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
     def run(self):
         """run asyncio loop with reconnection handling"""
         try:
-            # Programar monitoreo para que se inicie cuando el event loop esté corriendo
-            if hasattr(self, 'schedule_monitoring'):
-                self.schedule_monitoring()
-                self.logger.info("🔍 Sistema de monitoreo programado")
-            
             self.run_until_disconnected()
         except ConnectionAbortedError as e:
-            self.logger.error(f"🚨 Error 103 capturado: {e}")
-            # Intentar reconexión inmediata
+            self.logger.error(f"Error 103 capturado: {e}")
+            # Intentar reconexión paulatina
             import asyncio
             try:
                 loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
                 if loop and not loop.is_closed():
-                    self.logger.error("🔄 Intentando reconexión inmediata...")
-                    success = loop.run_until_complete(self.simple_reconnect())
+                    self.logger.info("Iniciando reconexión paulatina...")
+                    success = loop.run_until_complete(self.gradual_reconnect())
                     
                     if success:
-                        self.logger.error("✅ Reconexión exitosa, continuando...")
-                        # Continuar ejecución después de reconexión
+                        self.logger.info("Reconexión paulatina exitosa, continuando...")
                         self.run_until_disconnected()
                     else:
-                        self.logger.error("❌ Reconexión falló")
+                        self.logger.error("Reconexión paulatina falló")
                         raise
                 else:
-                    self.logger.error("❌ No se puede reconectar: loop cerrado")
+                    self.logger.error("No se puede reconectar: loop cerrado")
                     raise
             except Exception as reconnect_error:
-                self.logger.error(f"❌ Error durante reconexión: {reconnect_error}")
+                self.logger.error(f"Error durante reconexión: {reconnect_error}")
                 raise
         except KeyboardInterrupt:
-            self.logger.info("🛑 Bot detenido por el usuario")
+            self.logger.info("Bot detenido por el usuario")
         except Exception as e:
-            self.logger.error(f"❌ Error crítico: {e}")
+            self.logger.error(f"Error crítico: {e}")
             raise
 
     def add_handler(self, func, *args, **kwargs):
