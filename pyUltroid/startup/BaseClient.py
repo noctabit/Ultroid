@@ -260,45 +260,59 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         """Iniciar heartbeat después de que el cliente esté completamente conectado"""
         import asyncio
         # Programar el heartbeat para la próxima iteración del event loop
+        # Esperar más tiempo antes de iniciar el heartbeat para asegurar conexión estable
         if hasattr(self, 'loop') and self.loop:
-            self.loop.call_later(1, self._init_heartbeat_task)
+            self.loop.call_later(5, self._init_heartbeat_task)
         
     def _init_heartbeat_task(self):
         """Inicializar el task del heartbeat de forma segura"""
         import asyncio
         try:
-            if self._heartbeat_task is None:
+            if self._heartbeat_task is None or self._heartbeat_task.done():
+                # Cancelar task anterior si existe
+                if self._heartbeat_task and not self._heartbeat_task.done():
+                    self._heartbeat_task.cancel()
+                
                 self._heartbeat_task = self.loop.create_task(self._heartbeat_loop())
-                self.logger.info("💓 Sistema de heartbeat mejorado iniciado")
+                self.logger.info("💓 Sistema de heartbeat estabilizado iniciado")
         except Exception as e:
             self.logger.warning(f"💓 Error al iniciar heartbeat: {e}")
 
     async def _heartbeat_loop(self):
-        """Loop de heartbeat mejorado para mantener conexión activa"""
+        """Loop de heartbeat estabilizado para mantener conexión activa"""
         import asyncio
-        heartbeat_interval = 30  # 30 segundos
+        heartbeat_interval = 60  # Aumentado a 60 segundos para reducir verificaciones agresivas
+        consecutive_failures = 0
+        max_failures = 3  # Permitir 3 fallos consecutivos antes de reconectar
         
         while True:
             try:
                 await asyncio.sleep(heartbeat_interval)
                 
-                if not self.is_connected():
-                    self.logger.warning("💓 Heartbeat: Conexión perdida, activando reconexión")
-                    # Activar nuestro sistema de reconexión personalizado
-                    if hasattr(self, '_handle_reconnection'):
-                        asyncio.create_task(self._handle_reconnection())
-                    break
-                else:
-                    # Ping ligero para mantener la conexión activa
-                    try:
+                # Verificación robusta de conexión
+                connection_ok = False
+                try:
+                    if self.is_connected():
+                        # Hacer una verificación real pero ligera
                         await self.get_me()
-                        self.logger.debug("💓 Heartbeat: Conexión activa")
-                    except Exception as e:
-                        self.logger.warning(f"💓 Heartbeat ping falló: {e}")
-                        # Si el ping falla, puede que necesitemos reconectar
-                        if hasattr(self, '_handle_reconnection'):
+                        connection_ok = True
+                        consecutive_failures = 0
+                        self.logger.debug("💓 Heartbeat: Conexión verificada como activa")
+                    else:
+                        self.logger.debug("💓 Heartbeat: is_connected() retornó False")
+                except Exception as e:
+                    consecutive_failures += 1
+                    self.logger.debug(f"💓 Heartbeat ping falló (intento {consecutive_failures}/{max_failures}): {e}")
+                
+                # Solo activar reconexión después de múltiples fallos
+                if not connection_ok:
+                    if consecutive_failures >= max_failures:
+                        self.logger.warning(f"💓 Heartbeat: {consecutive_failures} fallos consecutivos, activando reconexión")
+                        if hasattr(self, '_handle_reconnection') and not getattr(self, '_reconnecting', False):
                             asyncio.create_task(self._handle_reconnection())
                         break
+                    else:
+                        self.logger.debug(f"💓 Heartbeat: Fallo {consecutive_failures}/{max_failures}, esperando antes de reconectar")
                         
             except asyncio.CancelledError:
                 self.logger.info("💓 Heartbeat cancelado")

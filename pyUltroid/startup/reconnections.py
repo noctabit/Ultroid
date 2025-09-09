@@ -100,7 +100,17 @@ class CustomTelegramClient(TelegramClient):
     async def _handle_reconnection(self):
         """Manejo mejorado de la reconexión con estrategia escalonada"""
         if self._reconnecting:
+            self.logger.debug("🔄 Reconexión ya en progreso, ignorando solicitud")
             return
+        
+        # Verificar una vez más antes de iniciar reconexión
+        if self.is_connected():
+            try:
+                await self.get_me()
+                self.logger.debug("✅ Conexión verificada como activa, cancelando reconexión")
+                return True
+            except Exception as e:
+                self.logger.debug(f"🔍 Verificación de conexión falló: {e}, procediendo con reconexión")
             
         self._reconnecting = True
         self.logger.warning("🔄 Iniciando proceso de reconexión...")
@@ -110,9 +120,14 @@ class CustomTelegramClient(TelegramClient):
             
             for attempt in range(attempts):
                 if self.is_connected():
-                    self.logger.info("✅ Cliente ya reconectado")
-                    self._reconnecting = False
-                    return True
+                    try:
+                        # Verificar que la conexión realmente funciona
+                        await self.get_me()
+                        self.logger.info("✅ Cliente ya reconectado y funcional")
+                        self._reconnecting = False
+                        return True
+                    except Exception as e:
+                        self.logger.debug(f"🔍 Conexión no funcional: {e}, continuando reconexión")
                 
                 try:
                     self._current_retries += 1
@@ -171,11 +186,21 @@ class CustomTelegramClient(TelegramClient):
             self.logger.warning(f"⚠️ Error durante desconexión: {e}")
 
     def is_connected(self):
-        """Verificación mejorada del estado de conexión"""
+        """Verificación del estado de conexión más estable"""
         try:
-            return super().is_connected() and hasattr(self, '_sender') and self._sender and not self._sender.is_disconnected()
-        except:
-            return False
+            # Verificación básica primero
+            basic_connected = super().is_connected()
+            if not basic_connected:
+                return False
+            
+            # Verificación adicional solo si es necesario
+            if hasattr(self, '_sender') and self._sender:
+                return not getattr(self._sender, 'is_disconnected', lambda: False)()
+            
+            return basic_connected
+        except Exception:
+            # En caso de error, mejor asumir que está conectado para evitar reconexiones innecesarias
+            return super().is_connected() if hasattr(super(), 'is_connected') else False
 
 
 
