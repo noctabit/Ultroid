@@ -11,7 +11,7 @@ import sys
 import time
 from logging import Logger
 
-from telethonpatch import TelegramClient
+from .reconnections_simple import SimpleReconnectionClient
 from telethon import utils as telethon_utils
 from telethon.errors import (
     AccessTokenExpiredError,
@@ -24,7 +24,7 @@ from ..configs import Var
 from . import *
 
 
-class UltroidClient(TelegramClient):  # Volver a la herencia simple
+class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
     def __init__(
         self,
         session,
