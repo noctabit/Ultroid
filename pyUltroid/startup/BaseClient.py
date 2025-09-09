@@ -234,10 +234,10 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
     def run(self):
         """run asyncio loop with reconnection handling"""
         try:
-            # Activar monitoreo de conexión automático
-            if hasattr(self, 'start_simple_monitoring'):
-                self.start_simple_monitoring()
-                self.logger.info("🔍 Sistema de monitoreo de conexión activado")
+            # Programar monitoreo para que se inicie cuando el event loop esté corriendo
+            if hasattr(self, 'schedule_monitoring'):
+                self.schedule_monitoring()
+                self.logger.info("🔍 Sistema de monitoreo programado")
             
             self.run_until_disconnected()
         except ConnectionAbortedError as e:

@@ -186,7 +186,27 @@ class SimpleReconnectionClient(TelegramClient):
 
     def start_simple_monitoring(self):
         """Iniciar monitoreo simple de la conexión"""
-        asyncio.create_task(self._simple_monitor_loop())
+        try:
+            asyncio.create_task(self._simple_monitor_loop())
+        except RuntimeError:
+            # Si no hay event loop corriendo, programar para más tarde
+            self.logger.warning("🔍 No hay event loop, programando monitoreo para más tarde")
+    
+    def schedule_monitoring(self):
+        """Programar monitoreo para cuando el event loop esté listo"""
+        try:
+            # Usar call_later para programar el inicio del monitoreo
+            self.loop.call_later(5, self._start_monitoring_task)
+        except Exception as e:
+            self.logger.warning(f"No se pudo programar monitoreo: {e}")
+    
+    def _start_monitoring_task(self):
+        """Iniciar la tarea de monitoreo en el event loop"""
+        try:
+            asyncio.create_task(self._simple_monitor_loop())
+            self.logger.info("🔍 Monitoreo de conexión iniciado")
+        except Exception as e:
+            self.logger.warning(f"Error iniciando monitoreo: {e}")
 
     async def _simple_monitor_loop(self):
         """Loop básico de monitoreo de conexión mejorado"""
