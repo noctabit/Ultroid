@@ -11,7 +11,7 @@ import sys
 import time
 from logging import Logger
 
-from .reconnections import SimpleReconnectionClient
+from .reconnections_simple import SimpleReconnectionClient
 from telethon import utils as telethon_utils
 from telethon.errors import (
     AccessTokenExpiredError,
@@ -218,21 +218,22 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         return self.loop.run_until_complete(function)
 
     def run(self):
-        """run asyncio loop with gradual reconnection"""
+        """run asyncio loop with simple reconnection"""
         try:
             self.run_until_disconnected()
-        except ConnectionAbortedError as e:
-            self.logger.error(f"Error 103 capturado: {e}")
-            # Usar reconexión paulatina
+        except (ConnectionAbortedError, ConnectionError, OSError) as e:
+            self.logger.error(f"Error de conexión detectado: {e}")
+            # Usar reconexión simple
             import asyncio
             try:
                 loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
                 if loop and not loop.is_closed():
-                    success = loop.run_until_complete(self.gradual_reconnect())
+                    success = loop.run_until_complete(self.simple_reconnect())
                     if success:
-                        self.logger.info("Reconexión paulatina exitosa")
+                        self.logger.info("Reconexión exitosa, continuando...")
                         self.run_until_disconnected()
                     else:
+                        self.logger.error("Reconexión falló")
                         raise
                 else:
                     raise
