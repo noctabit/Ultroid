@@ -133,13 +133,3 @@ class SimpleReconnectionClient(TelegramClient):
         else:
             return False
 
-    async def start_simple_monitoring(self):
-        """Monitoreo opcional simple cada 30 segundos"""
-        while True:
-            try:
-                await asyncio.sleep(30)
-                if not self.is_connected():
-                    self.logger.warning("⚠️ Conexión perdida detectada por monitoreo")
-                    await self.auto_reconnect_on_error()
-            except Exception as e:
-                self.logger.error(f"Error en monitoreo: {e}")
