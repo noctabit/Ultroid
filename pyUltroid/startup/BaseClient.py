@@ -96,7 +96,7 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         self._bot = await self.is_bot()
         
     def _setup_reconnection_system(self):
-        \"\"\"Configurar sistema de reconexión después de la inicialización\"\"\"
+        """Configurar sistema de reconexión después de la inicialización"""
         try:
             # Configurar parámetros de reconexión optimizados
             if hasattr(self, '_connection_failures'):
@@ -104,7 +104,9 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
             if hasattr(self, '_max_reconnect_attempts'):
                 self._max_reconnect_attempts = 5
             
-            self.logger.info(\"🔧 Sistema de reconexión configurado\")
+            self.logger.info("🔧 Sistema de reconexión configurado")
+        except Exception as e:
+            self.logger.warning(f"Error configurando reconexión: {e}")
 
     async def fast_uploader(self, file, **kwargs):
         """Upload files in a faster way"""
