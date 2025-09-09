@@ -102,8 +102,12 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             if self._log_at:
                 self.logger.info(f"✅ Logged in as {me}")
             self._bot = await self.is_bot()
-            # Iniciar heartbeat después de que el cliente esté completamente conectado
-            self._start_heartbeat()
+            # Programar el heartbeat para iniciarse después de que el event loop esté corriendo
+            try:
+                self.loop.call_soon(self._schedule_heartbeat)
+            except Exception:
+                # Si no podemos programarlo ahora, se iniciará manualmente más tarde
+                pass
         except Exception as e:
             self.logger.error(f"❌ Error getting user info: {e}")
             if self._handle_error:
@@ -256,15 +260,22 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         """Client's user id"""
         return self.me.id
 
+    def _schedule_heartbeat(self):
+        """Programar el inicio del heartbeat cuando el event loop esté listo"""
+        if self._heartbeat_task is None:
+            try:
+                self._heartbeat_task = self.loop.create_task(self._heartbeat_loop())
+                self.logger.info("💓 Heartbeat iniciado correctamente")
+            except Exception as e:
+                self.logger.warning(f"💓 No se pudo iniciar el heartbeat: {e}")
+
     def _start_heartbeat(self):
         """Iniciar el heartbeat para mantener la conexión activa"""
-        import asyncio
         try:
-            if self._heartbeat_task is None and self.loop.is_running():
-                self._heartbeat_task = self.loop.create_task(self._heartbeat_loop())
-        except RuntimeError:
-            # No hay event loop corriendo, se iniciará después
-            pass
+            if self._heartbeat_task is None:
+                self._schedule_heartbeat()
+        except Exception as e:
+            self.logger.warning(f"💓 Error al programar heartbeat: {e}")
 
     async def _heartbeat_loop(self):
         """Loop de heartbeat para verificar y mantener la conexión"""
