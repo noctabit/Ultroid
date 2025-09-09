@@ -49,11 +49,11 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         kwargs["api_id"] = api_id or Var.API_ID
         kwargs["api_hash"] = api_hash or Var.API_HASH
         kwargs["logger"] = self.logger  # Pasar logger a CustomTelegramClient
+        # Inicializar heartbeat task ANTES de llamar al parent
+        self._heartbeat_task = None
         super().__init__(session, **kwargs)
         self.run_in_loop(self.start_client(bot_token=bot_token))
         self.dc_id = self.session.dc_id
-        # Inicializar heartbeat para mantener la conexión activa
-        self._heartbeat_task = None
 
     def __repr__(self):
         return f"<Ultroid.Client :\n self: {self.full_name}\n bot: {self._bot}\n>"

@@ -47,11 +47,17 @@ class CustomTelegramClient(TelegramClient):
                 self.logger.info(f"Intentando conectar... (intento {attempt + 1}/{retries + 1})")
                 await super().connect(*args, **kwargs)
                 
+                # Verificar conexión más robusta
                 if self.is_connected():
-                    self.logger.info("✅ Conexión exitosa a Telegram")
-                    self._current_retries = 0
-                    self._reconnecting = False
-                    return True
+                    try:
+                        # Hacer una prueba real de la conexión
+                        await self.get_me()
+                        self.logger.info("✅ Conexión exitosa a Telegram")
+                        self._current_retries = 0
+                        self._reconnecting = False
+                        return True
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Conexión establecida pero no funcional: {e}")
                 else:
                     self.logger.warning("⚠️ Conexión no establecida correctamente")
                     
