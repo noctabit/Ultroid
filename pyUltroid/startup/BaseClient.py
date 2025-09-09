@@ -102,12 +102,8 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
             if self._log_at:
                 self.logger.info(f"✅ Logged in as {me}")
             self._bot = await self.is_bot()
-            # Programar el heartbeat para iniciarse después de que el event loop esté corriendo
-            try:
-                self.loop.call_soon(self._schedule_heartbeat)
-            except Exception:
-                # Si no podemos programarlo ahora, se iniciará manualmente más tarde
-                pass
+            # El heartbeat se maneja automáticamente por Telethon
+            self.logger.info("💓 Cliente conectado exitosamente")
         except Exception as e:
             self.logger.error(f"❌ Error getting user info: {e}")
             if self._handle_error:
@@ -260,50 +256,15 @@ class UltroidClient(CustomTelegramClient):  # Cambiado para heredar de CustomTel
         """Client's user id"""
         return self.me.id
 
-    def _schedule_heartbeat(self):
-        """Programar el inicio del heartbeat cuando el event loop esté listo"""
-        if self._heartbeat_task is None:
-            try:
-                self._heartbeat_task = self.loop.create_task(self._heartbeat_loop())
-                self.logger.info("💓 Heartbeat iniciado correctamente")
-            except Exception as e:
-                self.logger.warning(f"💓 No se pudo iniciar el heartbeat: {e}")
-
     def _start_heartbeat(self):
-        """Iniciar el heartbeat para mantener la conexión activa"""
-        try:
-            if self._heartbeat_task is None:
-                self._schedule_heartbeat()
-        except Exception as e:
-            self.logger.warning(f"💓 Error al programar heartbeat: {e}")
-
-    async def _heartbeat_loop(self):
-        """Loop de heartbeat para verificar y mantener la conexión"""
-        import asyncio
-        while True:
-            try:
-                await asyncio.sleep(30)  # Verificar cada 30 segundos
-                if not self.is_connected():
-                    self.logger.warning("💓 Heartbeat: Conexión perdida, activando reconexión")
-                    if hasattr(self, '_handle_reconnection'):
-                        asyncio.create_task(self._handle_reconnection())
-                else:
-                    # Ping simple para mantener la conexión activa
-                    try:
-                        await self.get_me()
-                    except Exception as e:
-                        self.logger.warning(f"💓 Heartbeat ping failed: {e}")
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.logger.error(f"💓 Heartbeat error: {e}")
-                await asyncio.sleep(10)
+        """Heartbeat simplificado - Telethon ya maneja la reconexión automáticamente"""
+        # Telethon ya tiene auto_reconnect=True, no necesitamos heartbeat personalizado
+        pass
 
     def stop_heartbeat(self):
         """Detener el heartbeat"""
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
-            self._heartbeat_task = None
+        # Ya no usamos heartbeat personalizado
+        pass
 
     def to_dict(self):
         return dict(inspect.getmembers(self))
