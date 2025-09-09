@@ -198,27 +198,53 @@ class CustomTelegramClient(TelegramClient):
         return False
 
     def disconnect(self):
-        """Desconexión controlada - DEBE ser síncrono para compatibilidad con Telethon"""
+        """Desconexión controlada compatible con sync/async"""
+        import asyncio
+        
+        async def _async_disconnect():
+            try:
+                if self.is_connected():
+                    self.logger.info("🔌 Desconectando cliente...")
+                    await super(CustomTelegramClient, self).disconnect()
+                    self.logger.info("✅ Cliente desconectado")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error durante desconexión: {e}")
+        
+        # Si estamos en un loop de asyncio activo, retornar una corrutina
+        try:
+            loop = asyncio.get_running_loop()
+            if loop and loop.is_running():
+                # Retornar la corrutina para que pueda ser awaited
+                return _async_disconnect()
+        except RuntimeError:
+            # No hay loop activo, ejecutar sincrónicamente
+            pass
+        
+        # Ejecutar sincrónicamente si no hay loop activo
         try:
             if self.is_connected():
-                self.logger.info("🔌 Desconectando cliente...")
-                # Usar la desconexión síncrona del padre para evitar RuntimeWarning
-                result = super().disconnect()
-                self.logger.info("✅ Cliente desconectado")
-                return result
+                self.logger.info("🔌 Desconectando cliente (sync)...")
+                # Usar versión sincrónica básica
+                if hasattr(self, '_sender') and self._sender:
+                    try:
+                        self._sender.disconnect()
+                    except Exception:
+                        pass
+                self.logger.info("✅ Cliente desconectado (sync)")
         except Exception as e:
-            self.logger.warning(f"⚠️ Error durante desconexión: {e}")
-            return None
+            self.logger.warning(f"⚠️ Error durante desconexión sync: {e}")
+        
+        return None
     
     async def disconnect_async(self):
-        """Versión async de desconexión para uso interno"""
+        """Versión async explícita para uso interno"""
         try:
             if self.is_connected():
-                self.logger.info("🔌 Desconectando cliente (async)...")
+                self.logger.info("🔌 Desconectando cliente (async explícito)...")
                 await super().disconnect()
-                self.logger.info("✅ Cliente desconectado (async)")
+                self.logger.info("✅ Cliente desconectado (async explícito)")
         except Exception as e:
-            self.logger.warning(f"⚠️ Error durante desconexión async: {e}")
+            self.logger.warning(f"⚠️ Error durante desconexión async explícito: {e}")
 
     def is_connected(self):
         """Verificación mejorada del estado de conexión"""
