@@ -11,7 +11,7 @@ import sys
 import time
 from logging import Logger
 
-from .reconnections_simple import SimpleReconnectionClient
+from telethonpatch import TelegramClient
 from telethon import utils as telethon_utils
 from telethon.errors import (
     AccessTokenExpiredError,
@@ -24,7 +24,7 @@ from ..configs import Var
 from . import *
 
 
-class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
+class UltroidClient(TelegramClient):
     def __init__(
         self,
         session,
@@ -218,32 +218,39 @@ class UltroidClient(SimpleReconnectionClient):  # Volver a la herencia simple
         return self.loop.run_until_complete(function)
 
     def run(self):
-        """run asyncio loop with simple reconnection"""
+        """run asyncio loop"""
         try:
             self.run_until_disconnected()
-        except (ConnectionAbortedError, ConnectionError, OSError) as e:
-            self.logger.error(f"Error de conexión detectado: {e}")
-            # Usar reconexión simple
-            import asyncio
+        except ConnectionAbortedError as e:
+            self.logger.error(f"Error 103 detectado: {e}")
+            # Solo reconexión básica para error 103
             try:
-                loop = self.loop if hasattr(self, 'loop') else asyncio.get_event_loop()
-                if loop and not loop.is_closed():
-                    success = loop.run_until_complete(self.simple_reconnect())
-                    if success:
-                        self.logger.info("Reconexión exitosa, continuando...")
-                        self.run_until_disconnected()
-                    else:
-                        self.logger.error("Reconexión falló")
-                        raise
+                import asyncio
+                success = self.loop.run_until_complete(self._simple_reconnect())
+                if success:
+                    self.logger.info("Reconexión exitosa")
+                    self.run_until_disconnected()
                 else:
                     raise
             except Exception:
                 raise
         except KeyboardInterrupt:
             self.logger.info("Bot detenido por el usuario")
-        except Exception as e:
-            self.logger.error(f"Error crítico: {e}")
-            raise
+
+    async def _simple_reconnect(self):
+        """Reconexión simple para error 103"""
+        for attempt in range(3):
+            try:
+                if self.is_connected():
+                    await self.disconnect()
+                await asyncio.sleep(2 ** attempt)  # 1s, 2s, 4s
+                await super().connect()
+                if self.is_connected():
+                    await self.get_me()
+                    return True
+            except Exception as e:
+                self.logger.warning(f"Reconexión intento {attempt + 1}: {e}")
+        return False
 
     def add_handler(self, func, *args, **kwargs):
         """Add new event handler, ignoring if exists"""
