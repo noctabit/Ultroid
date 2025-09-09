@@ -11,7 +11,7 @@ import sys
 import time
 from logging import Logger
 
-from telethonpatch import TelegramClient
+from .reconnections_simple import SimpleReconnectionClient
 from telethon import utils as telethon_utils
 from telethon.errors import (
     AccessTokenExpiredError,
@@ -24,7 +24,7 @@ from ..configs import Var
 from . import *
 
 
-class UltroidClient(TelegramClient):
+class UltroidClient(SimpleReconnectionClient):
     def __init__(
         self,
         session,
@@ -47,10 +47,6 @@ class UltroidClient(TelegramClient):
         kwargs["api_id"] = api_id or Var.API_ID
         kwargs["api_hash"] = api_hash or Var.API_HASH
         kwargs["base_logger"] = TelethonLogger
-        # Desactivar reconexión automática de Telethon
-        kwargs["auto_reconnect"] = False
-        kwargs["connection_retries"] = 0
-        kwargs["retry_delay"] = 0
         super().__init__(session, **kwargs)
         self.run_in_loop(self.start_client(bot_token=bot_token))
         self.dc_id = self.session.dc_id
@@ -221,27 +217,6 @@ class UltroidClient(TelegramClient):
         """run inside asyncio loop"""
         return self.loop.run_until_complete(function)
 
-    def run(self):
-        """run asyncio loop con reconexión simple"""
-        while True:
-            try:
-                self.run_until_disconnected()
-                break  # Salida normal
-            except Exception as e:
-                self.logger.error(f"Conexión perdida: {e}")
-                self.logger.info("Reintentando en 10 segundos...")
-                import time
-                time.sleep(10)
-                try:
-                    self.logger.info("Intentando reconectar...")
-                    import asyncio
-                    self.loop.run_until_complete(self.connect())
-                    if self.is_connected():
-                        self.logger.info("Reconectado exitosamente")
-                        continue  # Volver al bucle principal
-                except Exception as reconnect_error:
-                    self.logger.error(f"Fallo al reconectar: {reconnect_error}")
-                    continue  # Seguir intentando
 
     def add_handler(self, func, *args, **kwargs):
         """Add new event handler, ignoring if exists"""
