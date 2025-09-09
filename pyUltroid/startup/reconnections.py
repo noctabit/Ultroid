@@ -166,7 +166,7 @@ class CustomTelegramClient(TelegramClient):
                     # Desconectar si está parcialmente conectado
                     if hasattr(self, '_sender') and self._sender:
                         try:
-                            await self.disconnect()
+                            await self.disconnect_async()
                         except:
                             pass
                             
@@ -197,15 +197,28 @@ class CustomTelegramClient(TelegramClient):
         self._reconnecting = False
         return False
 
-    async def disconnect(self):
-        """Desconexión controlada"""
+    def disconnect(self):
+        """Desconexión controlada - DEBE ser síncrono para compatibilidad con Telethon"""
         try:
             if self.is_connected():
                 self.logger.info("🔌 Desconectando cliente...")
-                await super().disconnect()
+                # Usar la desconexión síncrona del padre para evitar RuntimeWarning
+                result = super().disconnect()
                 self.logger.info("✅ Cliente desconectado")
+                return result
         except Exception as e:
             self.logger.warning(f"⚠️ Error durante desconexión: {e}")
+            return None
+    
+    async def disconnect_async(self):
+        """Versión async de desconexión para uso interno"""
+        try:
+            if self.is_connected():
+                self.logger.info("🔌 Desconectando cliente (async)...")
+                await super().disconnect()
+                self.logger.info("✅ Cliente desconectado (async)")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error durante desconexión async: {e}")
 
     def is_connected(self):
         """Verificación mejorada del estado de conexión"""
